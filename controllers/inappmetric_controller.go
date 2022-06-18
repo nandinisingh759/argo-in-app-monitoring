@@ -18,30 +18,37 @@ package controllers
 
 import (
 	"context"
-	"fmt"
-	"strings"
+	//"fmt"
+	//"strings"
 	"time"
 
-	"github.com/go-logr/logr"
-	"github.com/robfig/cron"
+	//"github.com/go-logr/logr"
+	//"github.com/robfig/cron"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	//"sigs.k8s.io/controller-runtime/pkg/log"
 
 	argoinappiov1 "monitoring/api/v1"
 
 	batchv1 "k8s.io/api/batch/v1"
-	corev1 "k8s.io/api/core/v1"
+	//corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	ref "k8s.io/client-go/tools/reference"
+	//ref "k8s.io/client-go/tools/reference"
+	"monitoring/metricproviders/prometheus"
+
+	log "github.com/sirupsen/logrus"
+
+	// for testing
+	"github.com/prometheus/common/model"
 )
 
 // InAppMetricReconciler reconciles a InAppMetric object
 type InAppMetricReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
-	Log    logr.Logger
+	//Log    logr.Logger
 	Clock
 }
 
@@ -57,6 +64,18 @@ type Clock interface {
 var (
 	scheduledTimeAnnotation = "monitoring/scheduled-at"
 )
+
+// for testing
+func newScalar(f float64) model.Value {
+	return &model.Scalar{
+		Value:     model.SampleValue(f),
+		Timestamp: model.Time(0),
+	}
+}
+
+func newAnalysisRun() *argoinappiov1.MetricRun {
+	return &argoinappiov1.MetricRun{}
+}
 
 //+kubebuilder:rbac:groups=argo-in-app.io,resources=inappmetrics,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=argo-in-app.io,resources=inappmetrics/status,verbs=get;update;patch
@@ -74,9 +93,31 @@ var (
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.2/pkg/reconcile
 func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	//_ = log.FromContext(ctx)
+	e := log.Entry{}
 
-	var instance argoinappiov1.InAppMetric
+	mock := mockAPI{
+		value: newScalar(10),
+	}
+
+	p := prometheus.NewPrometheusProvider(mock, e)
+
+	metric := argoinappiov1.Metric{
+		Name:             "foo",
+		SuccessCondition: "result == 10",
+		FailureCondition: "result != 10",
+		Provider: argoinappiov1.MetricProvider{
+			Prometheus: &argoinappiov1.PrometheusMetric{
+				Query: "test",
+			},
+		},
+	}
+
+	measurement := p.Run(newAnalysisRun(), metric)
+
+	ctrl.Log.Info(measurement.Value)
+
+	/*var instance argoinappiov1.InAppMetric
 
 	err := r.Get(context.TODO(), req.NamespacedName, &instance)
 	if err != nil {
@@ -85,7 +126,7 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	/* List all active jobs and update the status */
-	var childJobs batchv1.JobList
+	/*var childJobs batchv1.JobList
 	if err := r.List(ctx, &childJobs, client.InNamespace(req.Namespace), client.MatchingFields{jobOwnerKey: req.Name}); err != nil {
 		ctrl.Log.Error(err, "Unable to list child Jobs")
 		return ctrl.Result{}, err
@@ -150,7 +191,7 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	/* Append active jobs to current job */
-	instance.Status.Active = nil
+	/*instance.Status.Active = nil
 	for _, activeJob := range activeJobs {
 		jobRef, err := ref.GetReference(r.Scheme, activeJob)
 		if err != nil {
@@ -173,7 +214,7 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	/* Check if suspended */
 
 	/* Get next scheduled run */
-	getNextSchedule := func(metric *argoinappiov1.InAppMetric, now time.Time) (lastMissed time.Time, next time.Time, err error) {
+	/*getNextSchedule := func(metric *argoinappiov1.InAppMetric, now time.Time) (lastMissed time.Time, next time.Time, err error) {
 		sched, err := cron.ParseStandard(metric.Spec.Schedule)
 		if err != nil {
 			return time.Time{}, time.Time{}, fmt.Errorf("Unparseable schedule %q: %v", metric.Spec.Schedule, err)
@@ -211,7 +252,7 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	ctrl.Log.WithValues("now", r.Now(), "next run", nextRun)
 
 	/* Run a new job if it's on schedule, not past the deadline, and not blocked by our concurrency policy */
-	if missedRun.IsZero() {
+	/*if missedRun.IsZero() {
 		ctrl.Log.Info("no upcoming scheduled times")
 		return scheduledResult, nil
 	}
@@ -222,7 +263,7 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	/* for now just consider replacement concurrency */
 
-	if instance.Spec.ConcurrencyPolicy == argoinappiov1.ReplaceConcurrent {
+	/*if instance.Spec.ConcurrencyPolicy == argoinappiov1.ReplaceConcurrent {
 		for _, activeJob := range activeJobs {
 			if err := r.Delete(ctx, activeJob, client.PropagationPolicy(metav1.DeletePropagationBackground)); client.IgnoreNotFound(err) != nil {
 				ctrl.Log.Error(err, "unable to delete active job", "job", activeJob)
@@ -232,7 +273,7 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	/* Constructing a Job */
-	constructJob := func(cr *argoinappiov1.InAppMetric, scheduledTime time.Time) (*batchv1.Job, error) {
+	/*constructJob := func(cr *argoinappiov1.InAppMetric, scheduledTime time.Time) (*batchv1.Job, error) {
 		name := fmt.Sprintf("%s-%d", cr.Name, scheduledTime.Unix())
 
 		job := &batchv1.Job{
@@ -268,7 +309,7 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	/* Make the job */
-	job, err := constructJob(&instance, missedRun)
+	/*job, err := constructJob(&instance, missedRun)
 	if err != nil {
 		ctrl.Log.Error(err, "unable to construct job")
 		return scheduledResult, nil
@@ -281,7 +322,8 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	ctrl.Log.Info("created job", "job", job)
 
-	return scheduledResult, nil
+	return scheduledResult, nil*/
+	return ctrl.Result{}, nil
 }
 
 var (

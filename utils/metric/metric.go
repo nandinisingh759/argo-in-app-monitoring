@@ -2,7 +2,8 @@ package metric
 
 import (
 	v1alpha1 "monitoring/api/v1"
-	timeutil "utils/time"
+
+	timeutil "monitoring/utils/time"
 )
 
 // MarkMeasurementError sets an error message on a measurement along with finish time
