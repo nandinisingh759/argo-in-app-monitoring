@@ -1,0 +1,20 @@
+# permissions for end users to view metricruns.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: metricrun-viewer-role
+rules:
+- apiGroups:
+  - argo-in-app.io
+  resources:
+  - metricruns
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - argo-in-app.io
+  resources:
+  - metricruns/status
+  verbs:
+  - get

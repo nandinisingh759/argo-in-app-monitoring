@@ -1,0 +1,9 @@
+apiVersion: argo-in-app.io/v1
+kind: InAppMetric
+metadata:
+  name: inappmetric-sample
+spec:
+  command: "echo hello world"
+  schedule: "*/1 * * * *"
+  concurrencyPolicy: Allow
+  startingDeadlineSeconds: 60

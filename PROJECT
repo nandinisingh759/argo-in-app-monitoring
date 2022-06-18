@@ -1,0 +1,23 @@
+domain: argo-in-app.io
+layout:
+- go.kubebuilder.io/v3
+projectName: argoinapp
+repo: monitoring
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: argo-in-app.io
+  kind: InAppMetric
+  path: monitoring/api/v1
+  version: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: argo-in-app.io
+  kind: MetricRun
+  path: monitoring/api/v1
+  version: v1
+version: "3"

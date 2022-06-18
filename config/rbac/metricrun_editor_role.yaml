@@ -1,0 +1,24 @@
+# permissions for end users to edit metricruns.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: metricrun-editor-role
+rules:
+- apiGroups:
+  - argo-in-app.io
+  resources:
+  - metricruns
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - argo-in-app.io
+  resources:
+  - metricruns/status
+  verbs:
+  - get

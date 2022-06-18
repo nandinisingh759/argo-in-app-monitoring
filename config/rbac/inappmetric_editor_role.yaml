@@ -1,0 +1,24 @@
+# permissions for end users to edit inappmetrics.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: inappmetric-editor-role
+rules:
+- apiGroups:
+  - argo-in-app.io
+  resources:
+  - inappmetrics
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - argo-in-app.io
+  resources:
+  - inappmetrics/status
+  verbs:
+  - get

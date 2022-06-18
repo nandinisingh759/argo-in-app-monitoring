@@ -1,0 +1,77 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - argo-in-app.io
+  resources:
+  - inappmetrics
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - argo-in-app.io
+  resources:
+  - inappmetrics/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - argo-in-app.io
+  resources:
+  - inappmetrics/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - argo-in-app.io
+  resources:
+  - metricruns
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - argo-in-app.io
+  resources:
+  - metricruns/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - argo-in-app.io
+  resources:
+  - metricruns/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - jobs/status
+  verbs:
+  - get
