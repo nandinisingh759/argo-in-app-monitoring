@@ -30,8 +30,8 @@ type InAppMetricSpec struct {
 	Schedule          string            `json:"schedule,omitempty"`
 	ConcurrencyPolicy ConcurrencyPolicy `json:"concurrencyPolicy,omitempty"`
 	//Suspend                 *bool             `json:"suspend,omitempty"`
-	StartingDeadlineSeconds *int64   `json:"startingDeadlineSeconds,omitempty"`
-	Metrics                 []Metric `json:"metrics" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,1,rep,name=metrics"`
+	StartingDeadlineSeconds *int64 `json:"startingDeadlineSeconds,omitempty"`
+	//Metrics                 []Metric `json:"metrics" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,1,rep,name=metrics"`
 }
 
 type ConcurrencyPolicy string

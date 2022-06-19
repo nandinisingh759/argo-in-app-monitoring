@@ -18,12 +18,13 @@ package controllers
 
 import (
 	"context"
-	//"fmt"
+	"fmt"
+
 	//"strings"
 	"time"
 
 	//"github.com/go-logr/logr"
-	//"github.com/robfig/cron"
+	"github.com/robfig/cron"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -94,7 +95,7 @@ func newAnalysisRun() *argoinappiov1.MetricRun {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.2/pkg/reconcile
 func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	//_ = log.FromContext(ctx)
-	e := log.Entry{}
+	/*e := log.Entry{}
 
 	mock := mockAPI{
 		value: newScalar(10),
@@ -102,7 +103,7 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	p := prometheus.NewPrometheusProvider(mock, e)
 
-	metric := argoinappiov1.Metric{
+	temp_metric := argoinappiov1.Metric{
 		Name:             "foo",
 		SuccessCondition: "result == 10",
 		FailureCondition: "result != 10",
@@ -113,9 +114,95 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		},
 	}
 
-	measurement := p.Run(newAnalysisRun(), metric)
+	measurement := p.Run(newAnalysisRun(), temp_metric)
 
-	ctrl.Log.Info(measurement.Value)
+	ctrl.Log.Info(measurement.Value)*/
+
+	var instance argoinappiov1.InAppMetric
+
+	err := r.Get(context.TODO(), req.NamespacedName, &instance)
+	if err != nil {
+		ctrl.Log.Error(err, "Error getting instance")
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	getNextSchedule := func(metric *argoinappiov1.InAppMetric, now time.Time) (lastMissed time.Time, next time.Time, err error) {
+		sched, err := cron.ParseStandard(metric.Spec.Schedule)
+		if err != nil {
+			return time.Time{}, time.Time{}, fmt.Errorf("Unparseable schedule %q: %v", metric.Spec.Schedule, err)
+		}
+
+		var earliestTime time.Time
+		if metric.Status.LastScheduleTime != nil {
+			earliestTime = metric.Status.LastScheduleTime.Time
+		} else {
+			earliestTime = metric.ObjectMeta.CreationTimestamp.Time
+		}
+
+		if earliestTime.After(now) {
+			return time.Time{}, sched.Next(now), nil
+		}
+
+		starts := 0
+		for t := sched.Next(earliestTime); !t.After(now); t = sched.Next(t) {
+			lastMissed = t
+			starts++
+			if starts > 100 {
+				return time.Time{}, time.Time{}, fmt.Errorf("too many missed starts")
+			}
+		}
+		return lastMissed, sched.Next(now), nil
+	}
+
+	missedRun, nextRun, err := getNextSchedule(&instance, r.Now())
+	if err != nil {
+		ctrl.Log.Error(err, "unable to figure out schedule")
+		return ctrl.Result{}, nil
+	}
+
+	scheduledResult := ctrl.Result{RequeueAfter: nextRun.Sub(r.Now())}
+	ctrl.Log.WithValues("now", r.Now(), "next run", nextRun)
+
+	/* Run a new job if it's on schedule, not past the deadline, and not blocked by our concurrency policy */
+	if missedRun.IsZero() {
+		ctrl.Log.Info("no upcoming scheduled times")
+		return scheduledResult, nil
+	}
+
+	/* Make metric */
+	e := log.Entry{}
+
+	mock := mockAPI{
+		value: newScalar(10),
+	}
+
+	p := prometheus.NewPrometheusProvider(mock, e)
+
+	temp_metric := argoinappiov1.Metric{
+		Name:             "foo",
+		SuccessCondition: "result == 10",
+		FailureCondition: "result != 10",
+		Provider: argoinappiov1.MetricProvider{
+			Prometheus: &argoinappiov1.PrometheusMetric{
+				Query: "test",
+			},
+		},
+	}
+
+	/* Make measurement */
+	measure := p.Run(newAnalysisRun(), temp_metric)
+
+	ctrl.Log.Info(measure.Value)
+
+	return scheduledResult, nil
+
+	//measurement := p.Run(newAnalysisRun(), temp_metric)
+
+	/* Run a new job if it's on schedule, not past the deadline, and not blocked by our concurrency policy */
+	/*if missedRun.IsZero() {
+		ctrl.Log.Info("no upcoming scheduled times")
+		return scheduledResult, nil
+	}
 
 	/*var instance argoinappiov1.InAppMetric
 
@@ -323,7 +410,6 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	ctrl.Log.Info("created job", "job", job)
 
 	return scheduledResult, nil*/
-	return ctrl.Result{}, nil
 }
 
 var (
