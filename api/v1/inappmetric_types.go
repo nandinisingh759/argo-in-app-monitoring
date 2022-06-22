@@ -26,12 +26,8 @@ import (
 
 // InAppMetricSpec defines the desired state of InAppMetric
 type InAppMetricSpec struct {
-	Command           string            `json:"command,omitempty"`
-	Schedule          string            `json:"schedule,omitempty"`
-	ConcurrencyPolicy ConcurrencyPolicy `json:"concurrencyPolicy,omitempty"`
-	//Suspend                 *bool             `json:"suspend,omitempty"`
-	StartingDeadlineSeconds *int64 `json:"startingDeadlineSeconds,omitempty"`
-	//Metrics                 []Metric `json:"metrics" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,1,rep,name=metrics"`
+	Schedule string   `json:"schedule,omitempty"`
+	Metrics  []Metric `json:"metrics" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,1,rep,name=metrics"`
 }
 
 type ConcurrencyPolicy string

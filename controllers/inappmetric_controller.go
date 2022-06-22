@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"os"
 
 	//"strings"
 	"time"
@@ -40,9 +41,6 @@ import (
 	"monitoring/metricproviders/prometheus"
 
 	log "github.com/sirupsen/logrus"
-
-	// for testing
-	"github.com/prometheus/common/model"
 )
 
 // InAppMetricReconciler reconciles a InAppMetric object
@@ -63,16 +61,9 @@ type Clock interface {
 }
 
 var (
-	scheduledTimeAnnotation = "monitoring/scheduled-at"
+	scheduledTimeAnnotation             = "monitoring/scheduled-at"
+	EnvVarArgoRolloutsPrometheusAddress = "ARGO_ROLLOUTS_PROMETHEUS_ADDRESS"
 )
-
-// for testing
-func newScalar(f float64) model.Value {
-	return &model.Scalar{
-		Value:     model.SampleValue(f),
-		Timestamp: model.Time(0),
-	}
-}
 
 func newAnalysisRun() *argoinappiov1.MetricRun {
 	return &argoinappiov1.MetricRun{}
@@ -171,28 +162,35 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	/* Make metric */
 	e := log.Entry{}
+	address := "http://127.0.0.1:9090"
+	os.Setenv(EnvVarArgoRolloutsPrometheusAddress, address)
 
-	mock := mockAPI{
-		value: newScalar(10),
-	}
-
-	p := prometheus.NewPrometheusProvider(mock, e)
-
-	temp_metric := argoinappiov1.Metric{
+	test_metric := argoinappiov1.Metric{
 		Name:             "foo",
 		SuccessCondition: "result == 10",
 		FailureCondition: "result != 10",
 		Provider: argoinappiov1.MetricProvider{
 			Prometheus: &argoinappiov1.PrometheusMetric{
-				Query: "test",
+				Query:   "machine_cpu_cores",
+				Address: address,
 			},
 		},
 	}
 
-	/* Make measurement */
-	measure := p.Run(newAnalysisRun(), temp_metric)
+	test_api, err := prometheus.NewPrometheusAPI(test_metric)
+	if err != nil {
+		ctrl.Log.Error(err, "error creating api")
+	}
 
-	ctrl.Log.Info(measure.Value)
+	p := prometheus.NewPrometheusProvider(test_api, e)
+
+	/* Make measurement */
+	run := newAnalysisRun()
+	measure := p.Run(run, test_metric)
+
+	//ctrl.Log.Info(run.Status.MetricResults[0].Message)
+
+	ctrl.Log.Info(measure.FinishedAt.String())
 
 	return scheduledResult, nil
 
