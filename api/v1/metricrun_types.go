@@ -19,6 +19,7 @@ package v1
 import (
 	"time"
 
+	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	intstrutil "k8s.io/apimachinery/pkg/util/intstr"
 )
@@ -71,6 +72,22 @@ type Metric struct {
 type MetricProvider struct {
 	// Prometheus specifies the prometheus metric to query
 	Prometheus *PrometheusMetric `json:"prometheus,omitempty" protobuf:"bytes,1,opt,name=prometheus"`
+	// Kayenta specifies a Kayenta metric
+	Kayenta *KayentaMetric `json:"kayenta,omitempty" protobuf:"bytes,2,opt,name=kayenta"`
+	// Web specifies a generic HTTP web metric
+	Web *WebMetric `json:"web,omitempty" protobuf:"bytes,3,opt,name=web"`
+	// Datadog specifies a datadog metric to query
+	Datadog *DatadogMetric `json:"datadog,omitempty" protobuf:"bytes,4,opt,name=datadog"`
+	// Wavefront specifies the wavefront metric to query
+	Wavefront *WavefrontMetric `json:"wavefront,omitempty" protobuf:"bytes,5,opt,name=wavefront"`
+	// NewRelic specifies the newrelic metric to query
+	NewRelic *NewRelicMetric `json:"newRelic,omitempty" protobuf:"bytes,6,opt,name=newRelic"`
+	// Job specifies the job metric run
+	Job *JobMetric `json:"job,omitempty" protobuf:"bytes,7,opt,name=job"`
+	// CloudWatch specifies the cloudWatch metric to query
+	CloudWatch *CloudWatchMetric `json:"cloudWatch,omitempty" protobuf:"bytes,8,opt,name=cloudWatch"`
+	// Graphite specifies the Graphite metric to query
+	Graphite *GraphiteMetric `json:"graphite,omitempty" protobuf:"bytes,9,opt,name=graphite"`
 }
 
 // AnalysisPhase is the overall phase of an AnalysisRun, MetricResult, or Measurement
@@ -100,6 +117,144 @@ type PrometheusMetric struct {
 	Address string `json:"address,omitempty" protobuf:"bytes,1,opt,name=address"`
 	// Query is a raw prometheus query to perform
 	Query string `json:"query,omitempty" protobuf:"bytes,2,opt,name=query"`
+}
+
+// WavefrontMetric defines the wavefront query to perform canary analysis
+type WavefrontMetric struct {
+	// Address is the HTTP address and port of the wavefront server
+	Address string `json:"address,omitempty" protobuf:"bytes,1,opt,name=address"`
+	// Query is a raw wavefront query to perform
+	Query string `json:"query,omitempty" protobuf:"bytes,2,opt,name=query"`
+}
+
+// NewRelicMetric defines the newrelic query to perform canary analysis
+type NewRelicMetric struct {
+	// Profile is the name of the secret holding NR account configuration
+	Profile string `json:"profile,omitempty" protobuf:"bytes,1,opt,name=profile"`
+	// Query is a raw newrelic NRQL query to perform
+	Query string `json:"query" protobuf:"bytes,2,opt,name=query"`
+}
+
+// JobMetric defines a job to run which acts as a metric
+type JobMetric struct {
+	Metadata metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
+	Spec     batchv1.JobSpec   `json:"spec" protobuf:"bytes,2,opt,name=spec"`
+}
+
+// GraphiteMetric defines the Graphite query to perform canary analysis
+type GraphiteMetric struct {
+	// Address is the HTTP address and port of the Graphite server
+	Address string `json:"address,omitempty" protobuf:"bytes,1,opt,name=address"`
+	// Query is a raw Graphite query to perform
+	Query string `json:"query,omitempty" protobuf:"bytes,2,opt,name=query"`
+}
+
+// CloudWatchMetric defines the cloudwatch query to perform canary analysis
+type CloudWatchMetric struct {
+	Interval          DurationString              `json:"interval,omitempty" protobuf:"bytes,1,opt,name=interval,casttype=DurationString"`
+	MetricDataQueries []CloudWatchMetricDataQuery `json:"metricDataQueries" protobuf:"bytes,2,rep,name=metricDataQueries"`
+}
+
+// CloudWatchMetricDataQuery defines the cloudwatch query
+type CloudWatchMetricDataQuery struct {
+	Id         string                  `json:"id,omitempty" protobuf:"bytes,1,opt,name=id"`
+	Expression *string                 `json:"expression,omitempty" protobuf:"bytes,2,opt,name=expression"`
+	Label      *string                 `json:"label,omitempty" protobuf:"bytes,3,opt,name=label"`
+	MetricStat *CloudWatchMetricStat   `json:"metricStat,omitempty" protobuf:"bytes,4,opt,name=metricStat"`
+	Period     *intstrutil.IntOrString `json:"period,omitempty" protobuf:"varint,5,opt,name=period"`
+	ReturnData *bool                   `json:"returnData,omitempty" protobuf:"bytes,6,opt,name=returnData"`
+}
+
+type CloudWatchMetricStat struct {
+	Metric CloudWatchMetricStatMetric `json:"metric,omitempty" protobuf:"bytes,1,opt,name=metric"`
+	Period intstrutil.IntOrString     `json:"period,omitempty" protobuf:"varint,2,opt,name=period"`
+	Stat   string                     `json:"stat,omitempty" protobuf:"bytes,3,opt,name=stat"`
+	Unit   string                     `json:"unit,omitempty" protobuf:"bytes,4,opt,name=unit"`
+}
+
+type CloudWatchMetricStatMetric struct {
+	Dimensions []CloudWatchMetricStatMetricDimension `json:"dimensions,omitempty" protobuf:"bytes,1,rep,name=dimensions"`
+	MetricName string                                `json:"metricName,omitempty" protobuf:"bytes,2,opt,name=metricName"`
+	Namespace  *string                               `json:"namespace,omitempty" protobuf:"bytes,3,opt,name=namespace"`
+}
+
+type CloudWatchMetricStatMetricDimension struct {
+	Name  string `json:"name,omitempty" protobuf:"bytes,1,opt,name=name"`
+	Value string `json:"value,omitempty" protobuf:"bytes,2,opt,name=value"`
+}
+
+type KayentaMetric struct {
+	Address string `json:"address" protobuf:"bytes,1,opt,name=address"`
+
+	Application string `json:"application" protobuf:"bytes,2,opt,name=application"`
+
+	CanaryConfigName string `json:"canaryConfigName" protobuf:"bytes,3,opt,name=canaryConfigName"`
+
+	MetricsAccountName       string `json:"metricsAccountName" protobuf:"bytes,4,opt,name=metricsAccountName"`
+	ConfigurationAccountName string `json:"configurationAccountName" protobuf:"bytes,5,opt,name=configurationAccountName"`
+	StorageAccountName       string `json:"storageAccountName" protobuf:"bytes,6,opt,name=storageAccountName"`
+
+	Threshold KayentaThreshold `json:"threshold" protobuf:"bytes,7,opt,name=threshold"`
+
+	Scopes []KayentaScope `json:"scopes" protobuf:"bytes,8,rep,name=scopes"`
+}
+
+type KayentaThreshold struct {
+	Pass     int64 `json:"pass" protobuf:"varint,1,opt,name=pass"`
+	Marginal int64 `json:"marginal" protobuf:"varint,2,opt,name=marginal"`
+}
+
+type KayentaScope struct {
+	Name            string      `json:"name" protobuf:"bytes,1,opt,name=name"`
+	ControlScope    ScopeDetail `json:"controlScope" protobuf:"bytes,2,opt,name=controlScope"`
+	ExperimentScope ScopeDetail `json:"experimentScope" protobuf:"bytes,3,opt,name=experimentScope"`
+}
+
+type ScopeDetail struct {
+	Scope  string `json:"scope" protobuf:"bytes,1,opt,name=scope"`
+	Region string `json:"region" protobuf:"bytes,2,opt,name=region"`
+	Step   int64  `json:"step" protobuf:"varint,3,opt,name=step"`
+	Start  string `json:"start" protobuf:"bytes,4,opt,name=start"`
+	End    string `json:"end" protobuf:"bytes,5,opt,name=end"`
+}
+
+type WebMetric struct {
+	// Method is the method of the web metric (empty defaults to GET)
+	Method WebMetricMethod `json:"method,omitempty" protobuf:"bytes,1,opt,name=method"`
+	// URL is the address of the web metric
+	URL string `json:"url" protobuf:"bytes,2,opt,name=url"`
+	// +patchMergeKey=key
+	// +patchStrategy=merge
+	// Headers are optional HTTP headers to use in the request
+	Headers []WebMetricHeader `json:"headers,omitempty" patchStrategy:"merge" patchMergeKey:"key" protobuf:"bytes,3,rep,name=headers"`
+	// Body is the body of the we metric (must be POST/PUT)
+	Body string `json:"body,omitempty" protobuf:"bytes,4,opt,name=body"`
+	// TimeoutSeconds is the timeout for the request in seconds (default: 10)
+	TimeoutSeconds int64 `json:"timeoutSeconds,omitempty" protobuf:"varint,5,opt,name=timeoutSeconds"`
+	// JSONPath is a JSON Path to use as the result variable (default: "{$}")
+	JSONPath string `json:"jsonPath,omitempty" protobuf:"bytes,6,opt,name=jsonPath"`
+	// Insecure skips host TLS verification
+	Insecure bool `json:"insecure,omitempty" protobuf:"varint,7,opt,name=insecure"`
+}
+
+// WebMetricMethod is the available HTTP methods
+type WebMetricMethod string
+
+// Possible HTTP method values
+const (
+	WebMetricMethodGet  WebMetricMethod = "GET"
+	WebMetricMethodPost WebMetricMethod = "POST"
+	WebMetricMethodPut  WebMetricMethod = "PUT"
+)
+
+type WebMetricHeader struct {
+	Key   string `json:"key" protobuf:"bytes,1,opt,name=key"`
+	Value string `json:"value" protobuf:"bytes,2,opt,name=value"`
+}
+
+type DatadogMetric struct {
+	Interval DurationString `json:"interval,omitempty" protobuf:"bytes,1,opt,name=interval,casttype=DurationString"`
+	Query    string         `json:"query" protobuf:"bytes,2,opt,name=query"`
 }
 
 // DurationString is a string representing a duration (e.g. 30s, 5m, 1h)

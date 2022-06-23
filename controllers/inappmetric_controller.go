@@ -30,17 +30,14 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	//"sigs.k8s.io/controller-runtime/pkg/log"
-
 	argoinappiov1 "monitoring/api/v1"
 	analysisutil "monitoring/utils/analysis"
 	timeutil "monitoring/utils/time"
 
+	"monitoring/metricproviders"
+
 	batchv1 "k8s.io/api/batch/v1"
-	//corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	//ref "k8s.io/client-go/tools/reference"
-	"monitoring/metricproviders/prometheus"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -88,7 +85,6 @@ func newMetricRun() *argoinappiov1.MetricRun {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.2/pkg/reconcile
 func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var inAppMetric argoinappiov1.InAppMetric
-	//var metricRun argoinappiov1.MetricRun
 
 	err := r.Get(context.TODO(), req.NamespacedName, &inAppMetric)
 	if err != nil {
@@ -141,11 +137,10 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	run := newMetricRun()
 	err = runMeasurements(run, inAppMetric.Spec.Metrics)
-	if err != nil {
-		ctrl.Log.Error(err, "error")
-	} else {
-		ctrl.Log.Info(strconv.Itoa(len(run.Status.MetricResults)))
-	}
+
+	ctrl.Log.Info(strconv.Itoa(len(run.Status.MetricResults)))
+	ctrl.Log.Info(run.Status.MetricResults[0].Measurements[0].Value)
+	ctrl.Log.Info(run.Status.MetricResults[1].Measurements[0].Value)
 
 	return scheduledResult, nil
 }
@@ -153,24 +148,23 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 func runMeasurements(run *argoinappiov1.MetricRun, tasks []argoinappiov1.Metric) error {
 	for _, task := range tasks {
 		e := log.Entry{}
-		api, err := prometheus.NewPrometheusAPI(task)
-		if err != nil {
-			ctrl.Log.Error(err, "error creating api")
-		}
 
-		p := prometheus.NewPrometheusProvider(api, e)
+		provider, err := metricproviders.NewProvider(e, task)
+		if err != nil {
+			return err
+		}
 
 		metricResult := analysisutil.GetResult(run, task.Name)
 		if metricResult == nil {
 			metricResult = &argoinappiov1.MetricResult{
 				Name:     task.Name,
 				Phase:    argoinappiov1.AnalysisPhaseRunning,
-				Metadata: p.GetMetadata(task),
+				Metadata: provider.GetMetadata(task),
 			}
 		}
 
 		var newMeasurement argoinappiov1.Measurement
-		newMeasurement = p.Run(run, task)
+		newMeasurement = provider.Run(run, task)
 
 		if newMeasurement.Phase.Completed() {
 			ctrl.Log.Info("Measurement Completed.")

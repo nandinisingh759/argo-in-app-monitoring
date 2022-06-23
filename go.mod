@@ -6,7 +6,7 @@ require (
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.18.1
 	k8s.io/apimachinery v0.24.2
-	k8s.io/client-go v0.24.0
+	k8s.io/client-go v0.24.2
 	sigs.k8s.io/controller-runtime v0.12.1
 )
 
@@ -14,15 +14,38 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/antonmedv/expr v1.9.0 // indirect
+	github.com/aws/aws-sdk-go-v2 v1.16.5 // indirect
+	github.com/aws/aws-sdk-go-v2/config v1.15.11 // indirect
+	github.com/aws/aws-sdk-go-v2/credentials v1.12.6 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.12.6 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.1.12 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.4.6 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/ini v1.3.13 // indirect
+	github.com/aws/aws-sdk-go-v2/service/cloudwatch v1.18.4 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.9.6 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.11.9 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sts v1.16.7 // indirect
+	github.com/aws/smithy-go v1.11.3 // indirect
+	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/emicklei/go-restful v2.9.5+incompatible // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
 	github.com/go-openapi/jsonreference v0.19.5 // indirect
 	github.com/go-openapi/swag v0.19.14 // indirect
 	github.com/google/gnostic v0.5.7-v3refs // indirect
+	github.com/google/go-querystring v1.1.0 // indirect
+	github.com/hashicorp/go-cleanhttp v0.5.1 // indirect
+	github.com/hashicorp/go-retryablehttp v0.7.0 // indirect
+	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/mailru/easyjson v0.7.6 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/newrelic/newrelic-client-go v0.86.1 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
+	github.com/spaceapegames/go-wavefront v1.8.1 // indirect
+	github.com/stretchr/testify v1.7.1 // indirect
+	github.com/tomnomnom/linkheader v0.0.0-20180905144013-02ca5825eb80 // indirect
+	github.com/valyala/fastjson v1.6.3 // indirect
 )
 
 require (
@@ -44,7 +67,7 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
-	github.com/google/go-cmp v0.5.5 // indirect
+	github.com/google/go-cmp v0.5.8 // indirect
 	github.com/google/gofuzz v1.1.0 // indirect
 	github.com/google/uuid v1.1.2 // indirect
 	github.com/googleapis/gnostic v0.5.5 // indirect
@@ -78,9 +101,9 @@ require (
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
-	k8s.io/api v0.24.0
+	k8s.io/api v0.24.2
 	k8s.io/apiextensions-apiserver v0.24.0 // indirect
-	k8s.io/component-base v0.24.0 // indirect
+	k8s.io/component-base v0.24.2 // indirect
 	k8s.io/klog/v2 v2.60.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20220328201542-3ee0da9b0b42 // indirect
 	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9 // indirect
