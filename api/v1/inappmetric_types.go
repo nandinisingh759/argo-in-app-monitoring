@@ -30,14 +30,6 @@ type InAppMetricSpec struct {
 	Metrics  []Metric `json:"metrics" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,1,rep,name=metrics"`
 }
 
-type ConcurrencyPolicy string
-
-const (
-	AllowConcurrent   ConcurrencyPolicy = "Allow"
-	ForbidConcurrent  ConcurrencyPolicy = "Forbid"
-	ReplaceConcurrent ConcurrencyPolicy = "Replace"
-)
-
 // InAppMetricStatus defines the observed state of InAppMetric
 type InAppMetricStatus struct {
 	Active           []corev1.ObjectReference `json:"active,omitempty"`

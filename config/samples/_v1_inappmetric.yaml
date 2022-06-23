@@ -3,7 +3,18 @@ kind: InAppMetric
 metadata:
   name: inappmetric-sample
 spec:
-  command: "echo hello world"
   schedule: "*/1 * * * *"
-  concurrencyPolicy: Allow
-  startingDeadlineSeconds: 60
+  metrics: 
+  - name: test
+    provider:
+      prometheus: 
+        address: http://127.0.0.1:9090
+        query: "container_cpu_user_seconds_total"
+  - name: test2
+    successCondition: result == 10
+    failureCondition: result != 10
+    provider:
+      prometheus: 
+        address: http://127.0.0.1:9090
+        query: "machine_cpu_cores"
+

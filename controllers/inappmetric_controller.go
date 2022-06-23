@@ -19,7 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"os"
+	"strconv"
 
 	//"strings"
 	"time"
@@ -33,6 +33,8 @@ import (
 	//"sigs.k8s.io/controller-runtime/pkg/log"
 
 	argoinappiov1 "monitoring/api/v1"
+	analysisutil "monitoring/utils/analysis"
+	timeutil "monitoring/utils/time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	//corev1 "k8s.io/api/core/v1"
@@ -65,7 +67,7 @@ var (
 	EnvVarArgoRolloutsPrometheusAddress = "ARGO_ROLLOUTS_PROMETHEUS_ADDRESS"
 )
 
-func newAnalysisRun() *argoinappiov1.MetricRun {
+func newMetricRun() *argoinappiov1.MetricRun {
 	return &argoinappiov1.MetricRun{}
 }
 
@@ -85,33 +87,10 @@ func newAnalysisRun() *argoinappiov1.MetricRun {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.2/pkg/reconcile
 func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	//_ = log.FromContext(ctx)
-	/*e := log.Entry{}
+	var inAppMetric argoinappiov1.InAppMetric
+	//var metricRun argoinappiov1.MetricRun
 
-	mock := mockAPI{
-		value: newScalar(10),
-	}
-
-	p := prometheus.NewPrometheusProvider(mock, e)
-
-	temp_metric := argoinappiov1.Metric{
-		Name:             "foo",
-		SuccessCondition: "result == 10",
-		FailureCondition: "result != 10",
-		Provider: argoinappiov1.MetricProvider{
-			Prometheus: &argoinappiov1.PrometheusMetric{
-				Query: "test",
-			},
-		},
-	}
-
-	measurement := p.Run(newAnalysisRun(), temp_metric)
-
-	ctrl.Log.Info(measurement.Value)*/
-
-	var instance argoinappiov1.InAppMetric
-
-	err := r.Get(context.TODO(), req.NamespacedName, &instance)
+	err := r.Get(context.TODO(), req.NamespacedName, &inAppMetric)
 	if err != nil {
 		ctrl.Log.Error(err, "Error getting instance")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -145,7 +124,7 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return lastMissed, sched.Next(now), nil
 	}
 
-	missedRun, nextRun, err := getNextSchedule(&instance, r.Now())
+	missedRun, nextRun, err := getNextSchedule(&inAppMetric, r.Now())
 	if err != nil {
 		ctrl.Log.Error(err, "unable to figure out schedule")
 		return ctrl.Result{}, nil
@@ -160,254 +139,87 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return scheduledResult, nil
 	}
 
-	/* Make metric */
-	e := log.Entry{}
-	address := "http://127.0.0.1:9090"
-	os.Setenv(EnvVarArgoRolloutsPrometheusAddress, address)
-
-	test_metric := argoinappiov1.Metric{
-		Name:             "foo",
-		SuccessCondition: "result == 10",
-		FailureCondition: "result != 10",
-		Provider: argoinappiov1.MetricProvider{
-			Prometheus: &argoinappiov1.PrometheusMetric{
-				Query:   "machine_cpu_cores",
-				Address: address,
-			},
-		},
-	}
-
-	test_api, err := prometheus.NewPrometheusAPI(test_metric)
+	run := newMetricRun()
+	err = runMeasurements(run, inAppMetric.Spec.Metrics)
 	if err != nil {
-		ctrl.Log.Error(err, "error creating api")
+		ctrl.Log.Error(err, "error")
+	} else {
+		ctrl.Log.Info(strconv.Itoa(len(run.Status.MetricResults)))
 	}
-
-	p := prometheus.NewPrometheusProvider(test_api, e)
-
-	/* Make measurement */
-	run := newAnalysisRun()
-	measure := p.Run(run, test_metric)
-
-	//ctrl.Log.Info(run.Status.MetricResults[0].Message)
-
-	ctrl.Log.Info(measure.FinishedAt.String())
 
 	return scheduledResult, nil
+}
 
-	//measurement := p.Run(newAnalysisRun(), temp_metric)
+func runMeasurements(run *argoinappiov1.MetricRun, tasks []argoinappiov1.Metric) error {
+	for _, task := range tasks {
+		e := log.Entry{}
+		api, err := prometheus.NewPrometheusAPI(task)
+		if err != nil {
+			ctrl.Log.Error(err, "error creating api")
+		}
 
-	/* Run a new job if it's on schedule, not past the deadline, and not blocked by our concurrency policy */
-	/*if missedRun.IsZero() {
-		ctrl.Log.Info("no upcoming scheduled times")
-		return scheduledResult, nil
-	}
+		p := prometheus.NewPrometheusProvider(api, e)
 
-	/*var instance argoinappiov1.InAppMetric
-
-	err := r.Get(context.TODO(), req.NamespacedName, &instance)
-	if err != nil {
-		ctrl.Log.Error(err, "Error getting instance")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
-
-	/* List all active jobs and update the status */
-	/*var childJobs batchv1.JobList
-	if err := r.List(ctx, &childJobs, client.InNamespace(req.Namespace), client.MatchingFields{jobOwnerKey: req.Name}); err != nil {
-		ctrl.Log.Error(err, "Unable to list child Jobs")
-		return ctrl.Result{}, err
-	}
-	// split jobs into active, successful and failed jobs
-	var activeJobs []*batchv1.Job
-	var successfulJobs []*batchv1.Job
-	var failedJobs []*batchv1.Job
-	var mostRecent *time.Time // find last run
-
-	isJobFinished := func(job *batchv1.Job) (bool, batchv1.JobConditionType) {
-		for _, c := range job.Status.Conditions {
-			if (c.Type == batchv1.JobComplete || c.Type == batchv1.JobFailed) && c.Status == corev1.ConditionTrue {
-				return true, c.Type
+		metricResult := analysisutil.GetResult(run, task.Name)
+		if metricResult == nil {
+			metricResult = &argoinappiov1.MetricResult{
+				Name:     task.Name,
+				Phase:    argoinappiov1.AnalysisPhaseRunning,
+				Metadata: p.GetMetadata(task),
 			}
 		}
-		return false, ""
-	}
 
-	getScheduledTimeForJob := func(job *batchv1.Job) (*time.Time, error) {
-		timeRaw := job.Annotations[scheduledTimeAnnotation]
-		if len(timeRaw) == 0 {
-			return nil, nil
-		}
+		var newMeasurement argoinappiov1.Measurement
+		newMeasurement = p.Run(run, task)
 
-		timeParsed, err := time.Parse(time.RFC3339, timeRaw)
-		if err != nil {
-			return nil, err
-		}
-		return &timeParsed, nil
-	}
-
-	for i, job := range childJobs.Items {
-		_, finishedType := isJobFinished(&job)
-		switch finishedType {
-		case "": // ongoing
-			activeJobs = append(activeJobs, &childJobs.Items[i])
-		case batchv1.JobFailed:
-			failedJobs = append(failedJobs, &childJobs.Items[i])
-		case batchv1.JobComplete:
-			successfulJobs = append(successfulJobs, &childJobs.Items[i])
-		}
-
-		scheduledTimeForJob, err := getScheduledTimeForJob(&job)
-		if err != nil {
-			ctrl.Log.Error(err, "unable to parse schedule time for child jobs", "job", &job)
-			continue
-		}
-		if scheduledTimeForJob != nil {
-			if mostRecent == nil {
-				mostRecent = scheduledTimeForJob
-			} else if mostRecent.Before(*scheduledTimeForJob) {
-				mostRecent = scheduledTimeForJob
+		if newMeasurement.Phase.Completed() {
+			ctrl.Log.Info("Measurement Completed.")
+			if newMeasurement.FinishedAt == nil {
+				finishedAt := timeutil.MetaNow()
+				newMeasurement.FinishedAt = &finishedAt
+			}
+			switch newMeasurement.Phase {
+			case argoinappiov1.AnalysisPhaseSuccessful:
+				metricResult.Successful++
+				metricResult.Count++
+				metricResult.ConsecutiveError = 0
+			case argoinappiov1.AnalysisPhaseFailed:
+				metricResult.Failed++
+				metricResult.Count++
+				metricResult.ConsecutiveError = 0
+			case argoinappiov1.AnalysisPhaseInconclusive:
+				metricResult.Inconclusive++
+				metricResult.Count++
+				metricResult.ConsecutiveError = 0
+			case argoinappiov1.AnalysisPhaseError:
+				metricResult.Error++
+				metricResult.ConsecutiveError++
+				ctrl.Log.Info(newMeasurement.Message)
 			}
 		}
+
+		metricResult.Measurements = append(metricResult.Measurements, newMeasurement)
+		analysisutil.SetResult(run, *metricResult)
 	}
+	return nil
+}
 
-	if mostRecent != nil {
-		instance.Status.LastScheduleTime = &metav1.Time{Time: *mostRecent}
-	} else {
-		instance.Status.LastScheduleTime = nil
-	}
-
-	/* Append active jobs to current job */
-	/*instance.Status.Active = nil
-	for _, activeJob := range activeJobs {
-		jobRef, err := ref.GetReference(r.Scheme, activeJob)
-		if err != nil {
-			ctrl.Log.Error(err, "unable to make reference to active job", "job", activeJob)
-			continue
-		}
-		instance.Status.Active = append(instance.Status.Active, *jobRef)
-	}
-
-	ctrl.Log.Info("job count", "active jobs", len(activeJobs), "successful jobs", len(successfulJobs), "failed jobs", len(failedJobs))
-
-	err = r.Status().Update(ctx, &instance)
-	if err != nil {
-		ctrl.Log.Error(err, "unable to update Job status")
-		return ctrl.Result{}, err
-	}
-
-	/* Clean up old jobs */
-
-	/* Check if suspended */
-
-	/* Get next scheduled run */
-	/*getNextSchedule := func(metric *argoinappiov1.InAppMetric, now time.Time) (lastMissed time.Time, next time.Time, err error) {
-		sched, err := cron.ParseStandard(metric.Spec.Schedule)
-		if err != nil {
-			return time.Time{}, time.Time{}, fmt.Errorf("Unparseable schedule %q: %v", metric.Spec.Schedule, err)
-		}
-
-		var earliestTime time.Time
-		if metric.Status.LastScheduleTime != nil {
-			earliestTime = metric.Status.LastScheduleTime.Time
-		} else {
-			earliestTime = metric.ObjectMeta.CreationTimestamp.Time
-		}
-
-		if earliestTime.After(now) {
-			return time.Time{}, sched.Next(now), nil
-		}
-
-		starts := 0
-		for t := sched.Next(earliestTime); !t.After(now); t = sched.Next(t) {
-			lastMissed = t
-			starts++
-			if starts > 100 {
-				return time.Time{}, time.Time{}, fmt.Errorf("too many missed starts")
-			}
-		}
-		return lastMissed, sched.Next(now), nil
-	}
-
-	missedRun, nextRun, err := getNextSchedule(&instance, r.Now())
-	if err != nil {
-		ctrl.Log.Error(err, "unable to figure out schedule")
-		return ctrl.Result{}, nil
-	}
-
-	scheduledResult := ctrl.Result{RequeueAfter: nextRun.Sub(r.Now())}
-	ctrl.Log.WithValues("now", r.Now(), "next run", nextRun)
-
-	/* Run a new job if it's on schedule, not past the deadline, and not blocked by our concurrency policy */
-	/*if missedRun.IsZero() {
-		ctrl.Log.Info("no upcoming scheduled times")
-		return scheduledResult, nil
-	}
-
-	ctrl.Log.WithValues("current run", missedRun)
-
-	/* add in if we want to consider starting deadlines */
-
-	/* for now just consider replacement concurrency */
-
-	/*if instance.Spec.ConcurrencyPolicy == argoinappiov1.ReplaceConcurrent {
-		for _, activeJob := range activeJobs {
-			if err := r.Delete(ctx, activeJob, client.PropagationPolicy(metav1.DeletePropagationBackground)); client.IgnoreNotFound(err) != nil {
-				ctrl.Log.Error(err, "unable to delete active job", "job", activeJob)
-				return ctrl.Result{}, err
-			}
+func Contains(arr []argoinappiov1.Metric, e argoinappiov1.Metric) bool {
+	for _, T := range arr {
+		if T == e {
+			return true
 		}
 	}
+	return false
+}
 
-	/* Constructing a Job */
-	/*constructJob := func(cr *argoinappiov1.InAppMetric, scheduledTime time.Time) (*batchv1.Job, error) {
-		name := fmt.Sprintf("%s-%d", cr.Name, scheduledTime.Unix())
-
-		job := &batchv1.Job{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name, // if the names are the same pass in a jobname
-				Namespace: cr.Namespace,
-				//Labels:    make(map[string]string),
-				Annotations: make(map[string]string),
-			},
-			Spec: batchv1.JobSpec{
-				Template: corev1.PodTemplateSpec{
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{
-							{
-								Name:    "busybox",
-								Image:   "busybox",
-								Command: strings.Split(cr.Spec.Command, " "),
-							},
-						},
-						RestartPolicy: corev1.RestartPolicyOnFailure,
-					},
-				},
-			},
+func Index(arr []argoinappiov1.Metric, e argoinappiov1.Metric) bool {
+	for _, T := range arr {
+		if T == e {
+			return true
 		}
-
-		job.Annotations[scheduledTimeAnnotation] = scheduledTime.Format(time.RFC3339)
-
-		if err := ctrl.SetControllerReference(cr, job, r.Scheme); err != nil {
-			return nil, err
-		}
-
-		return job, nil
 	}
-
-	/* Make the job */
-	/*job, err := constructJob(&instance, missedRun)
-	if err != nil {
-		ctrl.Log.Error(err, "unable to construct job")
-		return scheduledResult, nil
-	}
-
-	if err := r.Create(ctx, job); err != nil {
-		ctrl.Log.Error(err, "unable to create Job", "job", job)
-		return ctrl.Result{}, err
-	}
-
-	ctrl.Log.Info("created job", "job", job)
-
-	return scheduledResult, nil*/
+	return false
 }
 
 var (
