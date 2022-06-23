@@ -13,8 +13,6 @@ import (
 	"monitoring/metricproviders/webmetric"
 
 	log "github.com/sirupsen/logrus"
-	"k8s.io/client-go/kubernetes"
-	batchlisters "k8s.io/client-go/listers/batch/v1"
 
 	v1alpha1 "monitoring/api/v1"
 )
@@ -36,13 +34,6 @@ type Provider interface {
 	// of the metric result. For example, Prometheus uses is to store the final resolved queries.
 	GetMetadata(metric v1alpha1.Metric) map[string]string
 }
-
-type ProviderFactory struct {
-	KubeClient kubernetes.Interface
-	JobLister  batchlisters.JobLister
-}
-
-type ProviderFactoryFunc func(logCtx log.Entry, metric v1alpha1.Metric) (Provider, error)
 
 // NewProvider creates the correct provider based on the provider type of the Metric
 func NewProvider(logCtx log.Entry, metric v1alpha1.Metric) (Provider, error) {
