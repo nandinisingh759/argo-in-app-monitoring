@@ -69,6 +69,10 @@ type Metric struct {
 	ConsecutiveErrorLimit *intstrutil.IntOrString `json:"consecutiveErrorLimit,omitempty" protobuf:"bytes,9,opt,name=consecutiveErrorLimit"`
 	// Provider configuration to the external system to use to verify the analysis
 	Provider MetricProvider `json:"provider" protobuf:"bytes,10,opt,name=provider"`
+
+	Schedule string `json:"schedule,omitempty"`
+
+	LastScheduleTime *metav1.Time `json:"lastScheduleTime,omitempty"`
 }
 
 type MetricProvider struct {

@@ -91,34 +91,6 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	getNextSchedule := func(metric *argoinappiov1.InAppMetric, now time.Time) (lastMissed time.Time, next time.Time, err error) {
-		sched, err := cron.ParseStandard(metric.Spec.Schedule)
-		if err != nil {
-			return time.Time{}, time.Time{}, fmt.Errorf("Unparseable schedule %q: %v", metric.Spec.Schedule, err)
-		}
-
-		var earliestTime time.Time
-		if metric.Status.LastScheduleTime != nil {
-			earliestTime = metric.Status.LastScheduleTime.Time
-		} else {
-			earliestTime = metric.ObjectMeta.CreationTimestamp.Time
-		}
-
-		if earliestTime.After(now) {
-			return time.Time{}, sched.Next(now), nil
-		}
-
-		starts := 0
-		for t := sched.Next(earliestTime); !t.After(now); t = sched.Next(t) {
-			lastMissed = t
-			starts++
-			if starts > 100 {
-				return time.Time{}, time.Time{}, fmt.Errorf("too many missed starts")
-			}
-		}
-		return lastMissed, sched.Next(now), nil
-	}
-
 	missedRun, nextRun, err := getNextSchedule(&inAppMetric, r.Now())
 	if err != nil {
 		ctrl.Log.Error(err, "unable to figure out schedule")
@@ -145,10 +117,6 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
-	/*ctrl.Log.Info(run.Status.MetricResults[0].Measurements[0].Value)
-	ctrl.Log.Info(run.Status.MetricResults[1].Measurements[0].Value)
-	ctrl.Log.Info(string(run.Status.MetricResults[2].Phase))*/
-
 	run.Namespace = inAppMetric.Namespace
 	timeNow := timeutil.MetaNow().Unix()
 	run.Name = "metricrun-" + strconv.FormatInt(timeNow, 10)
@@ -164,6 +132,34 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	return scheduledResult, nil
+}
+
+func getNextSchedule(metric *argoinappiov1.InAppMetric, now time.Time) (lastMissed time.Time, next time.Time, err error) {
+	sched, err := cron.ParseStandard(metric.Spec.Schedule)
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("Unparseable schedule %q: %v", metric.Spec.Schedule, err)
+	}
+
+	var earliestTime time.Time
+	if metric.Status.LastScheduleTime != nil {
+		earliestTime = metric.Status.LastScheduleTime.Time
+	} else {
+		earliestTime = metric.ObjectMeta.CreationTimestamp.Time
+	}
+
+	if earliestTime.After(now) {
+		return time.Time{}, sched.Next(now), nil
+	}
+
+	starts := 0
+	for t := sched.Next(earliestTime); !t.After(now); t = sched.Next(t) {
+		lastMissed = t
+		starts++
+		if starts > 100 {
+			return time.Time{}, time.Time{}, fmt.Errorf("too many missed starts")
+		}
+	}
+	return lastMissed, sched.Next(now), nil
 }
 
 func runMeasurements(run *argoinappiov1.MetricRun, tasks []argoinappiov1.Metric) error {
