@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"strconv"
 
-	//"strings"
+	"strings"
 	"time"
 
 	//"github.com/go-logr/logr"
@@ -34,12 +34,21 @@ import (
 	analysisutil "monitoring/utils/analysis"
 	timeutil "monitoring/utils/time"
 
+	"monitoring/utils/defaults"
+	logutil "monitoring/utils/log"
+
 	"monitoring/metricproviders"
 
 	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	log "github.com/sirupsen/logrus"
+)
+
+const (
+	// SuccessfulAssessmentRunTerminatedResult is used for logging purposes when the metrics evaluation
+	// is successful and the run is terminated.
+	SuccessfulAssessmentRunTerminatedResult = "Metric Assessment Result - Successful: Run Terminated"
 )
 
 // InAppMetricReconciler reconciles a InAppMetric object
@@ -73,16 +82,6 @@ func newMetricRun() *argoinappiov1.MetricRun {
 //+kubebuilder:rbac:groups=argo-in-app.io,resources=inappmetrics/finalizers,verbs=update
 //+kubebuilder:rbac:groups=argo-in-app.io,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=argo-in-app.io,resources=jobs/status,verbs=get
-
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the InAppMetric object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.2/pkg/reconcile
 func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var inAppMetric argoinappiov1.InAppMetric
 
@@ -136,11 +135,33 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	run := newMetricRun()
+	logger := logutil.WithMetricRun(run)
 	err = runMeasurements(run, inAppMetric.Spec.Metrics)
+	if err != nil {
+		message := fmt.Sprintf("Unable to resolve metric arguments: %v", err)
+		logger.Warn(message)
+		run.Status.Phase = argoinappiov1.AnalysisPhaseError
+		run.Status.Message = message
+		return ctrl.Result{}, err
+	}
 
-	ctrl.Log.Info(strconv.Itoa(len(run.Status.MetricResults)))
-	ctrl.Log.Info(run.Status.MetricResults[0].Measurements[0].Value)
+	/*ctrl.Log.Info(run.Status.MetricResults[0].Measurements[0].Value)
 	ctrl.Log.Info(run.Status.MetricResults[1].Measurements[0].Value)
+	ctrl.Log.Info(string(run.Status.MetricResults[2].Phase))*/
+
+	run.Namespace = inAppMetric.Namespace
+	timeNow := timeutil.MetaNow().Unix()
+	run.Name = "metricrun-" + strconv.FormatInt(timeNow, 10)
+	newStatus, newMessage := assessRunStatus(run, inAppMetric.Spec.Metrics)
+	if newStatus != run.Status.Phase {
+		run.Status.Phase = newStatus
+		run.Status.Message = newMessage
+	}
+
+	err = r.Client.Create(context.TODO(), run)
+	if err != nil {
+		ctrl.Log.Error(err, "resource not created")
+	}
 
 	return scheduledResult, nil
 }
@@ -198,22 +219,166 @@ func runMeasurements(run *argoinappiov1.MetricRun, tasks []argoinappiov1.Metric)
 	return nil
 }
 
-func Contains(arr []argoinappiov1.Metric, e argoinappiov1.Metric) bool {
-	for _, T := range arr {
-		if T == e {
-			return true
+func assessRunStatus(run *argoinappiov1.MetricRun, metrics []argoinappiov1.Metric) (argoinappiov1.AnalysisPhase, string) {
+	var worstStatus argoinappiov1.AnalysisPhase
+	var worstMessage string
+	terminating := analysisutil.IsTerminating(run)
+	everythingCompleted := true
+
+	if run.Status.StartedAt == nil {
+		now := timeutil.MetaNow()
+		run.Status.StartedAt = &now
+	}
+	if run.Spec.Terminate {
+		worstMessage = "Run Terminated"
+	}
+
+	// Initialize Run summary object
+	runSummary := argoinappiov1.RunSummary{
+		Count:        0,
+		Successful:   0,
+		Failed:       0,
+		Inconclusive: 0,
+		Error:        0,
+	}
+
+	for _, metric := range metrics {
+		runSummary.Count++
+
+		if result := analysisutil.GetResult(run, metric.Name); result != nil {
+			logger := logutil.WithMetricRun(run).WithField("metric", metric.Name)
+			metricStatus := assessMetricStatus(metric, *result, terminating)
+			if result.Phase != metricStatus {
+				logger.Infof("Metric '%s' transitioned from %s -> %s", metric.Name, result.Phase, metricStatus)
+				if lastMeasurement := analysisutil.LastMeasurement(run, metric.Name); lastMeasurement != nil {
+					result.Message = lastMeasurement.Message
+				}
+				result.Phase = metricStatus
+				analysisutil.SetResult(run, *result)
+			}
+			if !metricStatus.Completed() {
+				// if any metric is in-progress, then entire analysis run will be considered running
+				everythingCompleted = false
+			} else {
+				phase, message := assessMetricFailureInconclusiveOrError(metric, *result)
+				if worstStatus == "" || analysisutil.IsWorse(worstStatus, metricStatus) {
+					worstStatus = metricStatus
+					if message != "" {
+						worstMessage = fmt.Sprintf("Metric \"%s\" assessed %s due to %s", metric.Name, metricStatus, message)
+						if result.Message != "" {
+							worstMessage += fmt.Sprintf(": \"Error Message: %s\"", result.Message)
+						}
+					}
+				}
+				// Update Run Summary
+				switch phase {
+				case argoinappiov1.AnalysisPhaseError:
+					runSummary.Error++
+				case argoinappiov1.AnalysisPhaseFailed:
+					runSummary.Failed++
+				case argoinappiov1.AnalysisPhaseInconclusive:
+					runSummary.Inconclusive++
+				case argoinappiov1.AnalysisPhaseSuccessful:
+					runSummary.Successful++
+				default:
+					// We'll mark the status as success by default if it doesn't match anything.
+					runSummary.Successful++
+				}
+			}
+		} else {
+			everythingCompleted = false
 		}
 	}
-	return false
+	worstMessage = strings.TrimSpace(worstMessage)
+	run.Status.RunSummary = runSummary
+	if terminating {
+		if worstStatus == "" {
+			// we have yet to take a single measurement, but have already been instructed to stop
+			log.Infof(SuccessfulAssessmentRunTerminatedResult)
+			return argoinappiov1.AnalysisPhaseSuccessful, worstMessage
+		}
+		log.Infof("Metric Assessment Result - %s: Run Terminated", worstStatus)
+		return worstStatus, worstMessage
+	}
+	if !everythingCompleted || worstStatus == "" {
+		return argoinappiov1.AnalysisPhaseRunning, ""
+	}
+	return worstStatus, worstMessage
+
 }
 
-func Index(arr []argoinappiov1.Metric, e argoinappiov1.Metric) bool {
-	for _, T := range arr {
-		if T == e {
-			return true
+func assessMetricFailureInconclusiveOrError(metric argoinappiov1.Metric, result argoinappiov1.MetricResult) (argoinappiov1.AnalysisPhase, string) {
+	var message string
+	var phase argoinappiov1.AnalysisPhase
+
+	failureLimit := int32(0)
+	if metric.FailureLimit != nil {
+		failureLimit = int32(metric.FailureLimit.IntValue())
+	}
+	if result.Failed > failureLimit {
+		phase = argoinappiov1.AnalysisPhaseFailed
+		message = fmt.Sprintf("failed (%d) > failureLimit (%d)", result.Failed, failureLimit)
+	}
+
+	inconclusiveLimit := int32(0)
+	if metric.InconclusiveLimit != nil {
+		inconclusiveLimit = int32(metric.InconclusiveLimit.IntValue())
+	}
+	if result.Inconclusive > inconclusiveLimit {
+		phase = argoinappiov1.AnalysisPhaseInconclusive
+		message = fmt.Sprintf("inconclusive (%d) > inconclusiveLimit (%d)", result.Inconclusive, inconclusiveLimit)
+	}
+
+	consecutiveErrorLimit := defaults.GetConsecutiveErrorLimitOrDefault(&metric)
+	if result.ConsecutiveError > consecutiveErrorLimit {
+		phase = argoinappiov1.AnalysisPhaseError
+		message = fmt.Sprintf("consecutiveErrors (%d) > consecutiveErrorLimit (%d)", result.ConsecutiveError, consecutiveErrorLimit)
+	}
+	return phase, message
+}
+
+// assessMetricStatus assesses the status of a single metric based on:
+// * current or latest measurement status
+// * parameters given by the metric (failureLimit, count, etc...)
+// * whether we are terminating (e.g. due to failing run, or termination request)
+func assessMetricStatus(metric argoinappiov1.Metric, result argoinappiov1.MetricResult, terminating bool) argoinappiov1.AnalysisPhase {
+	if result.Phase.Completed() {
+		return result.Phase
+	}
+	logger := log.WithField("metric", metric.Name)
+	if len(result.Measurements) == 0 {
+		if terminating {
+			logger.Infof(SuccessfulAssessmentRunTerminatedResult)
+			return argoinappiov1.AnalysisPhasePending
 		}
 	}
-	return false
+	lastMeasurement := result.Measurements[len(result.Measurements)-1]
+	if !lastMeasurement.Phase.Completed() {
+		// we still have an in-flight measurement
+		return argoinappiov1.AnalysisPhaseRunning
+	}
+	// Check if metric was considered Failed, Inconclusive, or Error
+	// If true, then return AnalysisRunPhase as Failed, Inconclusive, or Error respectively
+	phaseFailureInconclusiveOrError, message := assessMetricFailureInconclusiveOrError(metric, result)
+	if phaseFailureInconclusiveOrError != "" {
+		logger.Infof("Metric Assessment Result - %s: %s", phaseFailureInconclusiveOrError, message)
+		return phaseFailureInconclusiveOrError
+	}
+
+	// If a count was specified, and we reached that count, then metric is considered Successful.
+	// The Error, Failed, Inconclusive counters are ignored because those checks have already been
+	// taken into consideration above, and we do not want to fail if failures < failureLimit.
+	effectiveCount := metric.EffectiveCount()
+	if effectiveCount != nil && result.Count >= int32(effectiveCount.IntValue()) {
+		logger.Infof("Metric Assessment Result - %s: Count (%s) Reached", argoinappiov1.AnalysisPhaseSuccessful, effectiveCount.String())
+		return argoinappiov1.AnalysisPhaseSuccessful
+	}
+	// if we get here, this metric runs indefinitely
+	if terminating {
+		logger.Infof(SuccessfulAssessmentRunTerminatedResult)
+		return argoinappiov1.AnalysisPhaseSuccessful
+	}
+	return argoinappiov1.AnalysisPhaseRunning
 }
 
 var (

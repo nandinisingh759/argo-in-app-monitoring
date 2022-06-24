@@ -29,7 +29,9 @@ import (
 
 // MetricRunSpec defines the desired state of MetricRun
 type MetricRunSpec struct {
-	Metrics []Metric `json:"metrics" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,1,rep,name=metrics"`
+	Metrics []Metric `json:"metrics,omitempty" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,1,rep,name=metrics"`
+	// Terminate is used to prematurely stop the run (e.g. rollout completed and analysis is no longer desired)
+	Terminate bool `json:"terminate,omitempty" protobuf:"varint,3,opt,name=terminate"`
 }
 
 // Metric defines a metric in which to perform analysis
@@ -343,6 +345,18 @@ type Measurement struct {
 	Metadata map[string]string `json:"metadata,omitempty" protobuf:"bytes,6,rep,name=metadata"`
 	// ResumeAt is the  timestamp when the analysisRun should try to resume the measurement
 	ResumeAt *metav1.Time `json:"resumeAt,omitempty" protobuf:"bytes,7,opt,name=resumeAt"`
+}
+
+func (m *Metric) EffectiveCount() *intstrutil.IntOrString {
+	// Need to check if type is String
+	if m.Count == nil || m.Count.IntValue() == 0 {
+		if m.Interval == "" {
+			one := intstrutil.FromInt(1)
+			return &one
+		}
+		return nil
+	}
+	return m.Count
 }
 
 //+kubebuilder:object:root=true

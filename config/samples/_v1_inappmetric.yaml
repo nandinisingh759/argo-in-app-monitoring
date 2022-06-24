@@ -15,4 +15,10 @@ spec:
       prometheus: 
         address: http://127.0.0.1:9090
         query: "machine_cpu_cores"
+  - name: test3
+    successCondition: result[0] == 4
+    provider:
+      prometheus: 
+        address: http://127.0.0.1:9090
+        query: "machine_cpu_sockets"
 
