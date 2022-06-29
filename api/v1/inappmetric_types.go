@@ -27,6 +27,7 @@ import (
 // InAppMetricSpec defines the desired state of InAppMetric
 type InAppMetricSpec struct {
 	Schedule string   `json:"schedule,omitempty"`
+	RunLimit int      `json:"runLimit,omitempty"`
 	Metrics  []Metric `json:"metrics" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,1,rep,name=metrics"`
 }
 

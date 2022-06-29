@@ -88,6 +88,9 @@ spec:
                         5m, 1h) between each measurement. If omitted, will perform
                         a single measurement
                       type: string
+                    lastScheduleTime:
+                      format: date-time
+                      type: string
                     name:
                       description: Name is the name of the metric
                       type: string
@@ -9921,6 +9924,8 @@ spec:
                           - url
                           type: object
                       type: object
+                    schedule:
+                      type: string
                     successCondition:
                       description: 'SuccessCondition is an expression which determines
                         if a measurement is considered successful Expression is a
@@ -9934,6 +9939,8 @@ spec:
                   - provider
                   type: object
                 type: array
+              runLimit:
+                type: integer
               schedule:
                 type: string
             required:

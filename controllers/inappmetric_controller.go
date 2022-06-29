@@ -19,6 +19,8 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"sort"
+
 	"strconv"
 
 	"strings"
@@ -84,11 +86,38 @@ func newMetricRun() *argoinappiov1.MetricRun {
 //+kubebuilder:rbac:groups=argo-in-app.io,resources=jobs/status,verbs=get
 func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var inAppMetric argoinappiov1.InAppMetric
+	metricRunList := &argoinappiov1.MetricRunList{}
+	opts := []client.ListOption{
+		client.InNamespace(req.NamespacedName.Namespace),
+	}
 
 	err := r.Get(context.TODO(), req.NamespacedName, &inAppMetric)
 	if err != nil {
 		ctrl.Log.Error(err, "Error getting instance")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	err = r.List(context.TODO(), metricRunList, opts...)
+	if err != nil {
+		ctrl.Log.Error(err, "Could not list metric runs")
+	}
+
+	// Order MetricRuns by their name -> which is the time they were made
+	sort.Slice(metricRunList.Items, func(i, j int) bool {
+		return metricRunList.Items[i].Name < metricRunList.Items[j].Name
+	})
+
+	if inAppMetric.Spec.RunLimit != 0 {
+		for i, run := range metricRunList.Items {
+			if int32(i) >= int32(len(metricRunList.Items))-int32(inAppMetric.Spec.RunLimit) {
+				break
+			}
+			if err = r.Delete(context.TODO(), &run); client.IgnoreNotFound(err) != nil {
+				ctrl.Log.Error(err, "unable to delete old run", "run", run)
+			} else {
+				ctrl.Log.Info("deleted old run", "run", run)
+			}
+		}
 	}
 
 	missedRun, nextRun, err := getNextSchedule(&inAppMetric, r.Now())
@@ -107,6 +136,15 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	run := newMetricRun()
+	run.Namespace = inAppMetric.Namespace
+	timeNow := timeutil.MetaNow().Unix()
+	run.Name = "metricrun-" + strconv.FormatInt(timeNow, 10)
+
+	err = r.Client.Create(context.TODO(), run)
+	if err != nil {
+		ctrl.Log.Error(err, "resource not created")
+	}
+
 	logger := logutil.WithMetricRun(run)
 	err = runMeasurements(run, inAppMetric.Spec.Metrics)
 	if err != nil {
@@ -117,19 +155,13 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
-	run.Namespace = inAppMetric.Namespace
-	timeNow := timeutil.MetaNow().Unix()
-	run.Name = "metricrun-" + strconv.FormatInt(timeNow, 10)
 	newStatus, newMessage := assessRunStatus(run, inAppMetric.Spec.Metrics)
 	if newStatus != run.Status.Phase {
 		run.Status.Phase = newStatus
 		run.Status.Message = newMessage
 	}
 
-	err = r.Client.Create(context.TODO(), run)
-	if err != nil {
-		ctrl.Log.Error(err, "resource not created")
-	}
+	r.Client.Status().Update(context.TODO(), run)
 
 	return scheduledResult, nil
 }

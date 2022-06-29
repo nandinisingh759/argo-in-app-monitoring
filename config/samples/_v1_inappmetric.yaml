@@ -11,6 +11,7 @@ spec:
         address: http://127.0.0.1:9090
         query: "container_cpu_user_seconds_total"
   - name: test2
+    successCondition: result[0] == 4
     provider:
       prometheus: 
         address: http://127.0.0.1:9090
