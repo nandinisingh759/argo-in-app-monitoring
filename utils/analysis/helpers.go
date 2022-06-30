@@ -25,6 +25,16 @@ func SetResult(run *argoinappiov1.MetricRun, result argoinappiov1.MetricResult) 
 	run.Status.MetricResults = append(run.Status.MetricResults, result)
 }
 
+func SetMetrics(run *argoinappiov1.MetricRun, metric argoinappiov1.Metric) {
+	for i, r := range run.Spec.Metrics {
+		if r.Name == metric.Name {
+			run.Spec.Metrics[i] = metric
+			return
+		}
+	}
+	run.Spec.Metrics = append(run.Spec.Metrics, metric)
+}
+
 // MetricCompleted returns whether or not a metric was completed or not
 func MetricCompleted(run *argoinappiov1.MetricRun, metricName string) bool {
 	if result := GetResult(run, metricName); result != nil {

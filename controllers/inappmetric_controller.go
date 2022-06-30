@@ -100,12 +100,42 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	err = r.List(context.TODO(), metricRunList, opts...)
 	if err != nil {
 		ctrl.Log.Error(err, "Could not list metric runs")
+		return ctrl.Result{}, err
 	}
+
+	var mostRecentTime *time.Time
 
 	// Order MetricRuns by their name -> which is the time they were made
 	sort.Slice(metricRunList.Items, func(i, j int) bool {
 		return metricRunList.Items[i].Name < metricRunList.Items[j].Name
 	})
+
+	for _, run := range metricRunList.Items {
+		scheduledTimeForRun, err := getScheduledTimeForRun(&run)
+		if err != nil {
+			ctrl.Log.Error(err, "unable to parse schedule time for run", "run", run)
+			continue
+		}
+		if scheduledTimeForRun != nil {
+			if mostRecentTime == nil {
+				mostRecentTime = scheduledTimeForRun
+			} else if mostRecentTime.Before(*scheduledTimeForRun) {
+				mostRecentTime = scheduledTimeForRun
+			}
+		}
+	}
+
+	if mostRecentTime != nil {
+		inAppMetric.Status.LastScheduleTime = &metav1.Time{Time: *mostRecentTime}
+		ctrl.Log.Info("last schedule time: " + inAppMetric.Status.LastScheduleTime.GoString())
+	} else {
+		inAppMetric.Status.LastScheduleTime = nil
+	}
+
+	if err = r.Status().Update(context.TODO(), &inAppMetric); err != nil {
+		ctrl.Log.Error(err, "unable to update InAppMetric status")
+		return ctrl.Result{}, err
+	}
 
 	if inAppMetric.Spec.RunLimit != 0 {
 		for i, run := range metricRunList.Items {
@@ -139,6 +169,8 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	run.Namespace = inAppMetric.Namespace
 	timeNow := timeutil.MetaNow().Unix()
 	run.Name = "metricrun-" + strconv.FormatInt(timeNow, 10)
+	run.Annotations = make(map[string]string)
+	run.Annotations[scheduledTimeAnnotation] = missedRun.Format(time.RFC3339)
 
 	err = r.Client.Create(context.TODO(), run)
 	if err != nil {
@@ -161,9 +193,25 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		run.Status.Message = newMessage
 	}
 
-	r.Client.Status().Update(context.TODO(), run)
+	if err = r.Client.Status().Update(context.TODO(), run); err != nil {
+		ctrl.Log.Error(err, "unable to update metric run status")
+		return ctrl.Result{}, err
+	}
 
 	return scheduledResult, nil
+}
+
+func getScheduledTimeForRun(run *argoinappiov1.MetricRun) (*time.Time, error) {
+	timeRaw := run.Annotations[scheduledTimeAnnotation]
+	if len(timeRaw) == 0 {
+		return nil, nil
+	}
+
+	timeParsed, err := time.Parse(time.RFC3339, timeRaw)
+	if err != nil {
+		return nil, err
+	}
+	return &timeParsed, nil
 }
 
 func getNextSchedule(metric *argoinappiov1.InAppMetric, now time.Time) (lastMissed time.Time, next time.Time, err error) {
@@ -243,6 +291,7 @@ func runMeasurements(run *argoinappiov1.MetricRun, tasks []argoinappiov1.Metric)
 
 		metricResult.Measurements = append(metricResult.Measurements, newMeasurement)
 		analysisutil.SetResult(run, *metricResult)
+		analysisutil.SetMetrics(run, *&task)
 	}
 	return nil
 }
