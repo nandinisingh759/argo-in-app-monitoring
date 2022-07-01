@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -26,15 +25,14 @@ import (
 
 // InAppMetricSpec defines the desired state of InAppMetric
 type InAppMetricSpec struct {
-	Schedule string   `json:"schedule,omitempty"`
-	RunLimit int      `json:"runLimit,omitempty"`
-	Metrics  []Metric `json:"metrics" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,1,rep,name=metrics"`
+	Schedule string   `json:"schedule,omitempty"`                                                                     // Cron schedule on which queries will be run
+	RunLimit int      `json:"runLimit,omitempty"`                                                                     // maximum number of metricRuns that should exist in the cluster at one time
+	Metrics  []Metric `json:"metrics" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,1,rep,name=metrics"` // array of metrics to be run
 }
 
 // InAppMetricStatus defines the observed state of InAppMetric
 type InAppMetricStatus struct {
-	Active           []corev1.ObjectReference `json:"active,omitempty"`
-	LastScheduleTime *metav1.Time             `json:"lastScheduleTime,omitempty"`
+	LastScheduleTime *metav1.Time `json:"lastScheduleTime,omitempty"` // keeps track of last scheduled time
 }
 
 //+kubebuilder:object:root=true

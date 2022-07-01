@@ -29,9 +29,8 @@ import (
 
 // MetricRunSpec defines the desired state of MetricRun
 type MetricRunSpec struct {
+	// Array of metrics from inAppMetric Spec
 	Metrics []Metric `json:"metrics,omitempty" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,1,rep,name=metrics"`
-	// Terminate is used to prematurely stop the run (e.g. rollout completed and analysis is no longer desired)
-	Terminate bool `json:"terminate,omitempty" protobuf:"varint,3,opt,name=terminate"`
 }
 
 // Metric defines a metric in which to perform analysis
@@ -69,10 +68,6 @@ type Metric struct {
 	ConsecutiveErrorLimit *intstrutil.IntOrString `json:"consecutiveErrorLimit,omitempty" protobuf:"bytes,9,opt,name=consecutiveErrorLimit"`
 	// Provider configuration to the external system to use to verify the analysis
 	Provider MetricProvider `json:"provider" protobuf:"bytes,10,opt,name=provider"`
-
-	Schedule string `json:"schedule,omitempty"`
-
-	LastScheduleTime *metav1.Time `json:"lastScheduleTime,omitempty"`
 }
 
 type MetricProvider struct {

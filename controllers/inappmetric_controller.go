@@ -26,7 +26,6 @@ import (
 	"strings"
 	"time"
 
-	//"github.com/go-logr/logr"
 	"github.com/robfig/cron"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -57,7 +56,6 @@ const (
 type InAppMetricReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
-	//Log    logr.Logger
 	Clock
 }
 
@@ -75,6 +73,7 @@ var (
 	EnvVarArgoRolloutsPrometheusAddress = "ARGO_ROLLOUTS_PROMETHEUS_ADDRESS"
 )
 
+/** Returns address of new MetricRun object **/
 func newMetricRun() *argoinappiov1.MetricRun {
 	return &argoinappiov1.MetricRun{}
 }
@@ -91,12 +90,14 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		client.InNamespace(req.NamespacedName.Namespace),
 	}
 
+	// Get instance of inAppMetric object created by the yaml
 	err := r.Get(context.TODO(), req.NamespacedName, &inAppMetric)
 	if err != nil {
 		ctrl.Log.Error(err, "Error getting instance")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	// List all metric runs currently in the cluster
 	err = r.List(context.TODO(), metricRunList, opts...)
 	if err != nil {
 		ctrl.Log.Error(err, "Could not list metric runs")
@@ -110,6 +111,7 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return metricRunList.Items[i].Name < metricRunList.Items[j].Name
 	})
 
+	// Iterate through all metric runs to update mostRecentTime
 	for _, run := range metricRunList.Items {
 		scheduledTimeForRun, err := getScheduledTimeForRun(&run)
 		if err != nil {
@@ -125,18 +127,14 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 	}
 
+	// Use mostRecentTime to update LastScheduleTIme
 	if mostRecentTime != nil {
 		inAppMetric.Status.LastScheduleTime = &metav1.Time{Time: *mostRecentTime}
-		ctrl.Log.Info("last schedule time: " + inAppMetric.Status.LastScheduleTime.GoString())
 	} else {
 		inAppMetric.Status.LastScheduleTime = nil
 	}
 
-	if err = r.Status().Update(context.TODO(), &inAppMetric); err != nil {
-		ctrl.Log.Error(err, "unable to update InAppMetric status")
-		return ctrl.Result{}, err
-	}
-
+	// If user has specified a RunLimit (it will not be zero) delete any old runs that exceed the RunLImit
 	if inAppMetric.Spec.RunLimit != 0 {
 		for i, run := range metricRunList.Items {
 			if int32(i) >= int32(len(metricRunList.Items))-int32(inAppMetric.Spec.RunLimit) {
@@ -150,33 +148,38 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 	}
 
+	// Get the missedRun and nextRun times
 	missedRun, nextRun, err := getNextSchedule(&inAppMetric, r.Now())
 	if err != nil {
 		ctrl.Log.Error(err, "unable to figure out schedule")
 		return ctrl.Result{}, nil
 	}
 
+	// Create scheduledResult with the nextRun time
 	scheduledResult := ctrl.Result{RequeueAfter: nextRun.Sub(r.Now())}
-	ctrl.Log.WithValues("now", r.Now(), "next run", nextRun)
 
-	/* Run a new job if it's on schedule, not past the deadline, and not blocked by our concurrency policy */
+	// If missedRun is zero then it is not time to run any query so return the scheduledResult
 	if missedRun.IsZero() {
 		ctrl.Log.Info("no upcoming scheduled times")
 		return scheduledResult, nil
 	}
 
+	// Create newMetricRun
 	run := newMetricRun()
 	run.Namespace = inAppMetric.Namespace
 	timeNow := timeutil.MetaNow().Unix()
-	run.Name = "metricrun-" + strconv.FormatInt(timeNow, 10)
+	run.Name = "metricrun-" + strconv.FormatInt(timeNow, 10) // name of the metricRun is the time it was created in unix format
 	run.Annotations = make(map[string]string)
-	run.Annotations[scheduledTimeAnnotation] = missedRun.Format(time.RFC3339)
+	run.Annotations[scheduledTimeAnnotation] = missedRun.Format(time.RFC3339) // this annotation is used to later update lastScheduledTime
+	updateMetricsSpec(run, inAppMetric.Spec.Metrics)                          // Populate metricRun spec with the metrics from inAppMetric
 
+	// Create metricRun in cluster
 	err = r.Client.Create(context.TODO(), run)
 	if err != nil {
 		ctrl.Log.Error(err, "resource not created")
 	}
 
+	// Run measurements for given metrics
 	logger := logutil.WithMetricRun(run)
 	err = runMeasurements(run, inAppMetric.Spec.Metrics)
 	if err != nil {
@@ -187,20 +190,36 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
+	// Use measurement results to find status and message and populate metric run runSummary
 	newStatus, newMessage := assessRunStatus(run, inAppMetric.Spec.Metrics)
 	if newStatus != run.Status.Phase {
 		run.Status.Phase = newStatus
 		run.Status.Message = newMessage
 	}
 
+	// Update status of metricRun
 	if err = r.Client.Status().Update(context.TODO(), run); err != nil {
 		ctrl.Log.Error(err, "unable to update metric run status")
+		return ctrl.Result{}, err
+	}
+
+	// Update status of inAppMetric
+	if err = r.Status().Update(context.TODO(), &inAppMetric); err != nil {
+		ctrl.Log.Error(err, "unable to update InAppMetric status")
 		return ctrl.Result{}, err
 	}
 
 	return scheduledResult, nil
 }
 
+/** Populates given metricRun's metricRun.Spec.Metrics with the give metrics **/
+func updateMetricsSpec(run *argoinappiov1.MetricRun, tasks []argoinappiov1.Metric) {
+	for _, task := range tasks {
+		analysisutil.SetMetrics(run, task)
+	}
+}
+
+/** Get scheduled time for given run using annotation **/
 func getScheduledTimeForRun(run *argoinappiov1.MetricRun) (*time.Time, error) {
 	timeRaw := run.Annotations[scheduledTimeAnnotation]
 	if len(timeRaw) == 0 {
@@ -214,6 +233,7 @@ func getScheduledTimeForRun(run *argoinappiov1.MetricRun) (*time.Time, error) {
 	return &timeParsed, nil
 }
 
+/** Get the last missed time and the next time for runs using the cron schedule within inAppMetric **/
 func getNextSchedule(metric *argoinappiov1.InAppMetric, now time.Time) (lastMissed time.Time, next time.Time, err error) {
 	sched, err := cron.ParseStandard(metric.Spec.Schedule)
 	if err != nil {
@@ -231,17 +251,13 @@ func getNextSchedule(metric *argoinappiov1.InAppMetric, now time.Time) (lastMiss
 		return time.Time{}, sched.Next(now), nil
 	}
 
-	starts := 0
 	for t := sched.Next(earliestTime); !t.After(now); t = sched.Next(t) {
 		lastMissed = t
-		starts++
-		if starts > 100 {
-			return time.Time{}, time.Time{}, fmt.Errorf("too many missed starts")
-		}
 	}
 	return lastMissed, sched.Next(now), nil
 }
 
+/** Runs measurements for given metrics, and populates metricResults in the status of the given run **/
 func runMeasurements(run *argoinappiov1.MetricRun, tasks []argoinappiov1.Metric) error {
 	for _, task := range tasks {
 		e := log.Entry{}
@@ -291,11 +307,11 @@ func runMeasurements(run *argoinappiov1.MetricRun, tasks []argoinappiov1.Metric)
 
 		metricResult.Measurements = append(metricResult.Measurements, newMeasurement)
 		analysisutil.SetResult(run, *metricResult)
-		analysisutil.SetMetrics(run, *&task)
 	}
 	return nil
 }
 
+/** Given a metricRun, computes runSummary, phase and message for given metric tasks **/
 func assessRunStatus(run *argoinappiov1.MetricRun, metrics []argoinappiov1.Metric) (argoinappiov1.AnalysisPhase, string) {
 	var worstStatus argoinappiov1.AnalysisPhase
 	var worstMessage string
@@ -305,9 +321,6 @@ func assessRunStatus(run *argoinappiov1.MetricRun, metrics []argoinappiov1.Metri
 	if run.Status.StartedAt == nil {
 		now := timeutil.MetaNow()
 		run.Status.StartedAt = &now
-	}
-	if run.Spec.Terminate {
-		worstMessage = "Run Terminated"
 	}
 
 	// Initialize Run summary object

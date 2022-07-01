@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-notifs
+data:
+  trigger.on-analysis-run-error: |
+    - when: metricrun.status.runSummary.count == 3
+      send: [analysis-run-error]
+
+  template.analysis-run-error: |
+    message: |
+      Metric run {{.metricrun.metadata.name}} has failed.
+
+  service.email.gmail: |
+    username: $email-username
+    password: $email-password
+    host: smtp.gmail.com
+    port: 465
+    from: $email-username
