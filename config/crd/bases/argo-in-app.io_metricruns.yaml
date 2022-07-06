@@ -36,6 +36,7 @@ spec:
             description: MetricRunSpec defines the desired state of MetricRun
             properties:
               metrics:
+                description: Array of metrics from inAppMetric Spec
                 items:
                   description: Metric defines a metric in which to perform analysis
                   properties:
@@ -87,9 +88,6 @@ spec:
                       description: Interval defines an interval string (e.g. 30s,
                         5m, 1h) between each measurement. If omitted, will perform
                         a single measurement
-                      type: string
-                    lastScheduleTime:
-                      format: date-time
                       type: string
                     name:
                       description: Name is the name of the metric
@@ -9924,8 +9922,6 @@ spec:
                           - url
                           type: object
                       type: object
-                    schedule:
-                      type: string
                     successCondition:
                       description: 'SuccessCondition is an expression which determines
                         if a measurement is considered successful Expression is a
@@ -9939,10 +9935,6 @@ spec:
                   - provider
                   type: object
                 type: array
-              terminate:
-                description: Terminate is used to prematurely stop the run (e.g. rollout
-                  completed and analysis is no longer desired)
-                type: boolean
             type: object
           status:
             description: MetricRunStatus defines the observed state of MetricRun

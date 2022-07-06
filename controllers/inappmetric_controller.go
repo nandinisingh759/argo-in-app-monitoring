@@ -69,7 +69,8 @@ type Clock interface {
 }
 
 var (
-	scheduledTimeAnnotation             = "monitoring/scheduled-at"
+	notificationsAnnotation             = "notifications.argoproj.io/subscribe.on-analysis-run-error.temp"
+	scheduledTimeAnnotation             = "argo-in-app.io/scheduled-at"
 	EnvVarArgoRolloutsPrometheusAddress = "ARGO_ROLLOUTS_PROMETHEUS_ADDRESS"
 )
 
@@ -170,6 +171,7 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	timeNow := timeutil.MetaNow().Unix()
 	run.Name = "metricrun-" + strconv.FormatInt(timeNow, 10) // name of the metricRun is the time it was created in unix format
 	run.Annotations = make(map[string]string)
+	run.Annotations[notificationsAnnotation] = ""
 	run.Annotations[scheduledTimeAnnotation] = missedRun.Format(time.RFC3339) // this annotation is used to later update lastScheduledTime
 	updateMetricsSpec(run, inAppMetric.Spec.Metrics)                          // Populate metricRun spec with the metrics from inAppMetric
 

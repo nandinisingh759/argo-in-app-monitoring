@@ -47,9 +47,6 @@ func MetricCompleted(run *argoinappiov1.MetricRun, metricName string) bool {
 // was requested explicitly, or because a metric has already measured Failed, Error, or Inconclusive
 // which causes the run to end prematurely.
 func IsTerminating(run *argoinappiov1.MetricRun) bool {
-	if run.Spec.Terminate {
-		return true
-	}
 	for _, res := range run.Status.MetricResults {
 		switch res.Phase {
 		case argoinappiov1.AnalysisPhaseFailed, argoinappiov1.AnalysisPhaseError, argoinappiov1.AnalysisPhaseInconclusive:
