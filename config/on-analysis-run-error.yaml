@@ -9,13 +9,18 @@ data:
 
   template.analysis-run-error: |
     webhook: 
-      temp: 
+      whname: 
         method: POST
         path: /
         body: |
           Metric run {{.metricrun.metadata.name}} has failed.
 
-  service.webhook.temp: |
+  service.webhook.whname: |
     url: http://localhost:7893
+    headers:
+    - name: test
+      value: "{{.metricrun.metadata.name}}"
+    - name: content-type
+      value: application/x-www-form-urlencoded
   
   

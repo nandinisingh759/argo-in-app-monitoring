@@ -28,6 +28,7 @@ import (
 
 	"github.com/robfig/cron"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -69,7 +70,7 @@ type Clock interface {
 }
 
 var (
-	notificationsAnnotation             = "notifications.argoproj.io/subscribe.on-analysis-run-error.temp"
+	notificationsAnnotation             = "notifications.argoproj.io/subscribe.on-analysis-run-error.whname"
 	scheduledTimeAnnotation             = "argo-in-app.io/scheduled-at"
 	EnvVarArgoRolloutsPrometheusAddress = "ARGO_ROLLOUTS_PROMETHEUS_ADDRESS"
 )
@@ -199,10 +200,19 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		run.Status.Message = newMessage
 	}
 
+	err = r.Get(context.TODO(), types.NamespacedName{Name: run.Name, Namespace: run.Namespace}, run)
+	if err != nil {
+		ctrl.Log.Error(err, "Error getting metricRun instance")
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
 	// Update status of metricRun
 	if err = r.Client.Status().Update(context.TODO(), run); err != nil {
 		ctrl.Log.Error(err, "unable to update metric run status")
-		return ctrl.Result{}, err
+		return ctrl.Result{
+			Requeue:      true,
+			RequeueAfter: time.Second,
+		}, err
 	}
 
 	// Update status of inAppMetric

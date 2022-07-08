@@ -2,7 +2,8 @@ apiVersion: argo-in-app.io/v1
 kind: InAppMetric
 metadata:
   name: inappmetric-sample
-  # annotation: notifications.argoproj.io/subscribe.on-analysis-run-error.temp: "http://localhost:7893
+  annotations: 
+    notifications.argoproj.io/subscribe.on-analysis-run-error.whname: ""
 spec:
   schedule: "*/1 * * * *"
   runLimit: 4

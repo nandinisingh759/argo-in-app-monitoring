@@ -101,18 +101,6 @@ func notificationsController() {
 		},
 	}, namespace, secrets, configMaps)
 
-	a, err := notificationsFactory.GetAPI()
-
-	if a == nil {
-		ctrl.Log.Info("API IS NIL")
-	}
-	//ctrl.Log.Info("subscriptions length: " + strconv.Itoa(len(a.GetConfig().Subscriptions)))
-
-	//rest := temp.Recipients[0]
-
-	/*for _, v := range temp.Recipients {
-		ctrl.Log.Info("RECIPIENTS" + v)
-	}*/
 	// Create notifications controller that handles Kubernetes resources processing
 	runClient := dynamic.NewForConfigOrDie(restConfig).Resource(schema.GroupVersionResource{
 		Group: "argo-in-app.io", Version: "v1", Resource: "metricruns",
@@ -120,15 +108,11 @@ func notificationsController() {
 
 	runInformer := cache.NewSharedIndexInformer(&cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			ctrl.Log.Info("list")
 			runMetrics, err := runClient.List(context.Background(), options)
-			ctrl.Log.Info("list: ", "value: ", runMetrics)
 			return runMetrics, err
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			ctrl.Log.Info("watch")
 			runWatch, err := runClient.Watch(context.Background(), metav1.ListOptions{})
-			ctrl.Log.Info("watch: ", "value: ", runWatch)
 			return runWatch, err
 		},
 	}, &unstructured.Unstructured{}, time.Minute, cache.Indexers{})
