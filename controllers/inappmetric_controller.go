@@ -28,6 +28,7 @@ import (
 
 	"github.com/robfig/cron"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -69,7 +70,7 @@ type Clock interface {
 }
 
 var (
-	notificationsAnnotation             = "notifications.argoproj.io/subscribe.on-analysis-run-error.whname"
+	//notificationsAnnotation             = "notifications.argoproj.io/subscribe.on-analysis-run-error.whname"
 	scheduledTimeAnnotation             = "argo-in-app.io/scheduled-at"
 	EnvVarArgoRolloutsPrometheusAddress = "ARGO_ROLLOUTS_PROMETHEUS_ADDRESS"
 )
@@ -171,14 +172,14 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	timeNow := timeutil.MetaNow().Unix()
 	run.Name = "metricrun-" + strconv.FormatInt(timeNow, 10) // name of the metricRun is the time it was created in unix format
 	run.Annotations = make(map[string]string)
-	run.Annotations[notificationsAnnotation] = ""
+	//run.Annotations[notificationsAnnotation] = ""
 	run.Annotations[scheduledTimeAnnotation] = missedRun.Format(time.RFC3339) // this annotation is used to later update lastScheduledTime
 	updateMetricsSpec(run, inAppMetric.Spec.Metrics)                          // Populate metricRun spec with the metrics from inAppMetric
 
 	// grab annotations from inAppMetric and populate run's annotations
-	/*for k, v := range inAppMetric.Annotations {
+	for k, v := range inAppMetric.Annotations {
 		run.Annotations[k] = v
-	}*/
+	}
 
 	// Create metricRun in cluster
 	err = r.Client.Create(context.TODO(), run)
@@ -188,7 +189,7 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Run measurements for given metrics
 	logger := logutil.WithMetricRun(run)
-	err = runMeasurements(run, inAppMetric.Spec.Metrics)
+	metricResults, err := runMeasurements(run, inAppMetric.Spec.Metrics)
 	if err != nil {
 		message := fmt.Sprintf("Unable to resolve metric arguments: %v", err)
 		logger.Warn(message)
@@ -198,19 +199,32 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// Use measurement results to find status and message and populate metric run runSummary
-	newStatus, newMessage := assessRunStatus(run, inAppMetric.Spec.Metrics)
-	if newStatus != run.Status.Phase {
-		run.Status.Phase = newStatus
-		run.Status.Message = newMessage
+	newPhase, newMessage, currSummary := assessRunStatus(run, inAppMetric.Spec.Metrics)
+	currPhase := run.Status.Phase
+	currMessage := run.Status.Message
+	if newPhase != run.Status.Phase {
+		currPhase = newPhase
+		currMessage = newMessage
 	}
 
-	/*err = r.Get(context.TODO(), types.NamespacedName{Name: run.Name, Namespace: run.Namespace}, run)
+	err = r.Get(context.TODO(), types.NamespacedName{Name: run.Name, Namespace: run.Namespace}, run)
 	if err != nil {
 		ctrl.Log.Error(err, "Error getting metricRun instance")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}*/
+	}
+	now := timeutil.MetaNow()
+
+	status := argoinappiov1.MetricRunStatus{
+		Phase:         currPhase,
+		Message:       currMessage,
+		MetricResults: metricResults,
+		StartedAt:     &now,
+		RunSummary:    currSummary,
+	}
 
 	ctrl.Log.Info("RUN NAME: " + run.Name)
+
+	run.Status = status
 
 	// Update status of metricRun
 	if err = r.Client.Status().Update(context.TODO(), run); err != nil {
@@ -223,7 +237,10 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Update status of inAppMetric
 	if err = r.Status().Update(context.TODO(), &inAppMetric); err != nil {
 		ctrl.Log.Error(err, "unable to update InAppMetric status")
-		return ctrl.Result{}, err
+		return ctrl.Result{
+			Requeue:      true,
+			RequeueAfter: time.Second,
+		}, err
 	}
 
 	return scheduledResult, nil
@@ -275,13 +292,14 @@ func getNextSchedule(metric *argoinappiov1.InAppMetric, now time.Time) (lastMiss
 }
 
 /** Runs measurements for given metrics, and populates metricResults in the status of the given run **/
-func runMeasurements(run *argoinappiov1.MetricRun, tasks []argoinappiov1.Metric) error {
+func runMeasurements(run *argoinappiov1.MetricRun, tasks []argoinappiov1.Metric) ([]argoinappiov1.MetricResult, error) {
+	metricResults := []argoinappiov1.MetricResult{}
 	for _, task := range tasks {
 		e := log.Entry{}
 
 		provider, err := metricproviders.NewProvider(e, task)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		metricResult := analysisutil.GetResult(run, task.Name)
@@ -324,12 +342,13 @@ func runMeasurements(run *argoinappiov1.MetricRun, tasks []argoinappiov1.Metric)
 
 		metricResult.Measurements = append(metricResult.Measurements, newMeasurement)
 		analysisutil.SetResult(run, *metricResult)
+		metricResults = append(metricResults, *metricResult)
 	}
-	return nil
+	return metricResults, nil
 }
 
 /** Given a metricRun, computes runSummary, phase and message for given metric tasks **/
-func assessRunStatus(run *argoinappiov1.MetricRun, metrics []argoinappiov1.Metric) (argoinappiov1.AnalysisPhase, string) {
+func assessRunStatus(run *argoinappiov1.MetricRun, metrics []argoinappiov1.Metric) (argoinappiov1.AnalysisPhase, string, argoinappiov1.RunSummary) {
 	var worstStatus argoinappiov1.AnalysisPhase
 	var worstMessage string
 	terminating := analysisutil.IsTerminating(run)
@@ -397,20 +416,20 @@ func assessRunStatus(run *argoinappiov1.MetricRun, metrics []argoinappiov1.Metri
 		}
 	}
 	worstMessage = strings.TrimSpace(worstMessage)
-	run.Status.RunSummary = runSummary
+	//run.Status.RunSummary = runSummary
 	if terminating {
 		if worstStatus == "" {
 			// we have yet to take a single measurement, but have already been instructed to stop
 			log.Infof(SuccessfulAssessmentRunTerminatedResult)
-			return argoinappiov1.AnalysisPhaseSuccessful, worstMessage
+			return argoinappiov1.AnalysisPhaseSuccessful, worstMessage, runSummary
 		}
 		log.Infof("Metric Assessment Result - %s: Run Terminated", worstStatus)
-		return worstStatus, worstMessage
+		return worstStatus, worstMessage, runSummary
 	}
 	if !everythingCompleted || worstStatus == "" {
-		return argoinappiov1.AnalysisPhaseRunning, ""
+		return argoinappiov1.AnalysisPhaseRunning, "", runSummary
 	}
-	return worstStatus, worstMessage
+	return worstStatus, worstMessage, runSummary
 
 }
 
