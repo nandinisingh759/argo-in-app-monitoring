@@ -28,7 +28,6 @@ import (
 
 	"github.com/robfig/cron"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -176,6 +175,11 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	run.Annotations[scheduledTimeAnnotation] = missedRun.Format(time.RFC3339) // this annotation is used to later update lastScheduledTime
 	updateMetricsSpec(run, inAppMetric.Spec.Metrics)                          // Populate metricRun spec with the metrics from inAppMetric
 
+	// grab annotations from inAppMetric and populate run's annotations
+	/*for k, v := range inAppMetric.Annotations {
+		run.Annotations[k] = v
+	}*/
+
 	// Create metricRun in cluster
 	err = r.Client.Create(context.TODO(), run)
 	if err != nil {
@@ -200,20 +204,21 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		run.Status.Message = newMessage
 	}
 
-	err = r.Get(context.TODO(), types.NamespacedName{Name: run.Name, Namespace: run.Namespace}, run)
+	/*err = r.Get(context.TODO(), types.NamespacedName{Name: run.Name, Namespace: run.Namespace}, run)
 	if err != nil {
 		ctrl.Log.Error(err, "Error getting metricRun instance")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
+	}*/
+
+	ctrl.Log.Info("RUN NAME: " + run.Name)
 
 	// Update status of metricRun
 	if err = r.Client.Status().Update(context.TODO(), run); err != nil {
 		ctrl.Log.Error(err, "unable to update metric run status")
-		return ctrl.Result{
-			Requeue:      true,
-			RequeueAfter: time.Second,
-		}, err
+		return ctrl.Result{}, err
 	}
+
+	ctrl.Log.Info("RUN COUNT: " + strconv.Itoa(int(run.Status.RunSummary.Count)))
 
 	// Update status of inAppMetric
 	if err = r.Status().Update(context.TODO(), &inAppMetric); err != nil {
