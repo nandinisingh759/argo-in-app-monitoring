@@ -222,8 +222,6 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		RunSummary:    currSummary,
 	}
 
-	ctrl.Log.Info("RUN NAME: " + run.Name)
-
 	run.Status = status
 
 	// Update status of metricRun
@@ -231,8 +229,6 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		ctrl.Log.Error(err, "unable to update metric run status")
 		return ctrl.Result{}, err
 	}
-
-	ctrl.Log.Info("RUN COUNT: " + strconv.Itoa(int(run.Status.RunSummary.Count)))
 
 	// Update status of inAppMetric
 	if err = r.Status().Update(context.TODO(), &inAppMetric); err != nil {
