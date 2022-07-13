@@ -1,7 +1,7 @@
 apiVersion: argo-in-app.io/v1
 kind: InAppMetric
 metadata:
-  name: inappmetric-sample
+  name: inappmetric-main
   annotations: 
     notifications.argoproj.io/subscribe.on-analysis-run-error.whname: ""
 spec:

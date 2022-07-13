@@ -13,15 +13,11 @@ data:
         method: POST
         path: /
         body: |
-          {
-            Metric run : {{.run.metadata.name}} has failed.
-          }
+            Metric run {{.run.metadata.name}} has failed.
 
   service.webhook.whname: |
     url: http://localhost:7893
     headers:
-    - name: test
-      value: "{{.metricrun.metadata.name}}"
     - name: content-type
       value: application/x-www-form-urlencoded
   

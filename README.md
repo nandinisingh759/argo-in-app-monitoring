@@ -1,8 +1,10 @@
-# argoinapp
-// TODO(user): Add simple overview of use/purpose
+# Argo In-App Monitoring
+Argo In-App Monitoring allows users to run scheduled analysis of their clusters and receive notifications based on the metrics run on their cluster.
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+There are two components to this controller: the metrics being run and notifications about the metrics.
+### Metrics
+Under the `config` folder edit `main-config.yaml`. 
 
 ## Getting Started
 You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) to get a local cluster for testing, or run against a remote cluster.

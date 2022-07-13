@@ -1,6 +1,0 @@
-apiVersion: argo-in-app.io/v1
-kind: MetricRun
-metadata:
-  name: metricrun-sample
-spec:
-  # TODO(user): Add fields here
