@@ -51,6 +51,7 @@ const (
 	// SuccessfulAssessmentRunTerminatedResult is used for logging purposes when the metrics evaluation
 	// is successful and the run is terminated.
 	SuccessfulAssessmentRunTerminatedResult = "Metric Assessment Result - Successful: Run Terminated"
+	scheduledTimeAnnotation                 = "argo-in-app.io/scheduled-at"
 )
 
 // InAppMetricReconciler reconciles a InAppMetric object
@@ -68,12 +69,6 @@ func (_ realClock) Now() time.Time { return time.Now() }
 type Clock interface {
 	Now() time.Time
 }
-
-var (
-	//notificationsAnnotation             = "notifications.argoproj.io/subscribe.on-analysis-run-error.whname"
-	scheduledTimeAnnotation             = "argo-in-app.io/scheduled-at"
-	EnvVarArgoRolloutsPrometheusAddress = "ARGO_ROLLOUTS_PROMETHEUS_ADDRESS"
-)
 
 /** Returns address of new MetricRun object **/
 func newMetricRun() *argoinappiov1.MetricRun {
@@ -136,7 +131,7 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		inAppMetric.Status.LastScheduleTime = nil
 	}
 
-	// If user has specified a RunLimit (it will not be zero) delete any old runs that exceed the RunLImit
+	// If user has specified a RunLimit (it will not be zero) delete any old runs that exceed the runLimit
 	if inAppMetric.Spec.RunLimit != 0 {
 		for i, run := range metricRunList.Items {
 			if int32(i) >= int32(len(metricRunList.Items))-int32(inAppMetric.Spec.RunLimit) {
@@ -172,11 +167,10 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	timeNow := timeutil.MetaNow().Unix()
 	run.Name = "metricrun-" + strconv.FormatInt(timeNow, 10) // name of the metricRun is the time it was created in unix format
 	run.Annotations = make(map[string]string)
-	//run.Annotations[notificationsAnnotation] = ""
 	run.Annotations[scheduledTimeAnnotation] = missedRun.Format(time.RFC3339) // this annotation is used to later update lastScheduledTime
 	updateMetricsSpec(run, inAppMetric.Spec.Metrics)                          // Populate metricRun spec with the metrics from inAppMetric
 
-	// grab annotations from inAppMetric and populate run's annotations
+	// Grab annotations from inAppMetric and populate run's annotations
 	for k, v := range inAppMetric.Annotations {
 		run.Annotations[k] = v
 	}
@@ -214,6 +208,7 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 	now := timeutil.MetaNow()
 
+	// Populate status of metricRun
 	status := argoinappiov1.MetricRunStatus{
 		Phase:         currPhase,
 		Message:       currMessage,
@@ -337,7 +332,6 @@ func runMeasurements(run *argoinappiov1.MetricRun, tasks []argoinappiov1.Metric)
 		}
 
 		metricResult.Measurements = append(metricResult.Measurements, newMeasurement)
-		analysisutil.SetResult(run, *metricResult)
 		metricResults = append(metricResults, *metricResult)
 	}
 	return metricResults, nil
@@ -412,7 +406,6 @@ func assessRunStatus(run *argoinappiov1.MetricRun, metrics []argoinappiov1.Metri
 		}
 	}
 	worstMessage = strings.TrimSpace(worstMessage)
-	//run.Status.RunSummary = runSummary
 	if terminating {
 		if worstStatus == "" {
 			// we have yet to take a single measurement, but have already been instructed to stop

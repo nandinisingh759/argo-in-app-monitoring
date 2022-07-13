@@ -93,7 +93,7 @@ func notificationsController() {
 	// Create "Notifications" API factory that handles notifications processing
 	notificationsFactory := api.NewFactory(api.Settings{
 		ConfigMapName: "test-notifs",
-		SecretName:    "analysis-notifications-secret",
+		SecretName:    "notifications-secret",
 		InitGetVars: func(cfg *api.Config, configMap *v1.ConfigMap, secret *v1.Secret) (api.GetVars, error) {
 			return func(obj map[string]interface{}, dest services.Destination) map[string]interface{} {
 				return map[string]interface{}{"run": obj}

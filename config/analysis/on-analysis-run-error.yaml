@@ -4,7 +4,7 @@ metadata:
   name: test-notifs
 data:
   trigger.on-analysis-run-error: |
-    - when: run.status.runSummary.count == 3
+    - when: run.status.phase == 'Running'
       send: [analysis-run-error]
 
   template.analysis-run-error: |
@@ -13,12 +13,13 @@ data:
         method: POST
         path: /
         body: |
-            Metric run {{.run.metadata.name}} has failed.
+            Metric run {{.run.status.phase}} is running.
 
   service.webhook.whname: |
     url: http://localhost:7893
     headers:
     - name: content-type
       value: application/x-www-form-urlencoded
-  
+
+
   
