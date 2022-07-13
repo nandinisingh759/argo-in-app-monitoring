@@ -4,7 +4,13 @@ Argo In-App Monitoring allows users to run scheduled analysis of their clusters 
 ## Description
 There are two components to this controller: the metrics being run and notifications about the metrics.
 ### Metrics
-Under the `config` folder edit `main-config.yaml`. 
+Under the `config` folder edit `main-config.yaml`:
+- `schedule`: cron schedule on which metrics are run
+- `runLimit`: specifies how many metric runs are to be kept in the cluster at a time, oldest runs are deleted
+- `metrics`: array of metrics to be run on the cluster
+
+### Notifications
+Under `config/analysis` create YAML files for desired notifications:
 
 ## Getting Started
 You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) to get a local cluster for testing, or run against a remote cluster.
