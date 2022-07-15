@@ -9961,10 +9961,7 @@ spec:
                         Inconclusive
                       format: int32
                       type: integer
-                    countFlag:
-                      type: boolean
-                    currCount:
-                      description: ADD IN DESCRIPTION
+                    counter:
                       format: int32
                       type: integer
                     dryRun:

@@ -131,9 +131,6 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			if analysisutil.GetResult(&r, metric.Name) != nil {
 				counter := analysisutil.GetResult(&r, metric.Name).Counter
 				if metric.Count != nil && int(counter) != 0 && int(counter) != metric.Count.IntValue() {
-					ctrl.Log.Info(strconv.Itoa(int(counter)))
-					ctrl.Log.Info(strconv.Itoa(metric.Count.IntValue()))
-					ctrl.Log.Info("NEVER REACHED")
 					run = &r // this is an incomplete metric
 				}
 			}
@@ -239,7 +236,7 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	run.Status = status
 
-	/*nextReconcileTime := calculateNextReconcileTime(run, inAppMetric.Spec.Metrics)
+	nextReconcileTime := calculateNextReconcileTime(run, inAppMetric.Spec.Metrics)
 	if nextReconcileTime != nil {
 		enqueueSeconds := nextReconcileTime.Sub(timeutil.Now())
 		if enqueueSeconds < 0 {
@@ -247,9 +244,9 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 		ctrl.Log.Info("Enqueueing analysis after %v", "enqueue seconds", enqueueSeconds, "scheduled time", scheduledResultTime)
 		if enqueueSeconds < scheduledResultTime {
-			scheduledResult = ctrl.Result{RequeueAfter: scheduledResultTime}
+			scheduledResult = ctrl.Result{RequeueAfter: enqueueSeconds}
 		}
-	}*/
+	}
 
 	// Update status of metricRun
 	if err = r.Client.Status().Update(context.TODO(), run); err != nil {
@@ -269,7 +266,7 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	return scheduledResult, nil
 }
 
-// calculateNextReconcileTime calculates the next time that this AnalysisRun should be reconciled,
+// calculateNextReconcileTime calculates the next time that this MetricRun should be reconciled,
 // based on the earliest time of all metrics intervals, counts, and their finishedAt timestamps
 func calculateNextReconcileTime(run *argoinappiov1.MetricRun, metrics []argoinappiov1.Metric) *time.Time {
 	var reconcileTime *time.Time
@@ -335,6 +332,8 @@ func calculateNextReconcileTime(run *argoinappiov1.MetricRun, metrics []argoinap
 		// Take the earliest time of all metrics
 		metricReconcileTime := lastMeasurement.FinishedAt.Add(interval)
 		if reconcileTime == nil || reconcileTime.After(metricReconcileTime) {
+			ctrl.Log.Info("RECONCILE TIME: " + metricReconcileTime.String())
+			ctrl.Log.Info("CURRENT TIME" + time.Now().String())
 			reconcileTime = &metricReconcileTime
 		}
 	}
@@ -399,9 +398,20 @@ func getNextSchedule(metric *argoinappiov1.InAppMetric, now time.Time) (lastMiss
 
 /** Runs measurements for given metrics, and populates metricResults in the status of the given run **/
 func runMeasurements(run *argoinappiov1.MetricRun, tasks []argoinappiov1.Metric) ([]argoinappiov1.MetricResult, error) {
-	metricResults := []argoinappiov1.MetricResult{}
+	var metricResults []argoinappiov1.MetricResult
+	if run.Status.MetricResults == nil {
+		metricResults = []argoinappiov1.MetricResult{}
+	} else {
+		metricResults = run.Status.MetricResults
+	}
+
+	//metricResults = []argoinappiov1.MetricResult{}
 	for _, task := range tasks {
 		e := log.Entry{}
+		if task.Count == nil {
+			ctrl.Log.Info(task.Name)
+			ctrl.Log.Info("COUNT IS NIL")
+		}
 
 		provider, err := metricproviders.NewProvider(e, task)
 		if err != nil {
@@ -417,7 +427,7 @@ func runMeasurements(run *argoinappiov1.MetricRun, tasks []argoinappiov1.Metric)
 				Counter:  1,
 			}
 		} else {
-			if task.Count.IntValue() == int(metricResult.Counter) {
+			if task.Count == nil || (task.Count.IntValue() == int(metricResult.Counter)) {
 				continue
 			} else {
 				metricResult.Counter++
@@ -454,7 +464,7 @@ func runMeasurements(run *argoinappiov1.MetricRun, tasks []argoinappiov1.Metric)
 		}
 
 		metricResult.Measurements = append(metricResult.Measurements, newMeasurement)
-		metricResults = append(metricResults, *metricResult)
+		metricResults = analysisutil.SetMetricResult(metricResults, *metricResult)
 	}
 	return metricResults, nil
 }

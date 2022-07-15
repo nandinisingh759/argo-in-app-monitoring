@@ -14,6 +14,18 @@ func GetResult(run *argoinappiov1.MetricRun, metricName string) *argoinappiov1.M
 	return nil
 }
 
+// SetMetricResult updates the metric result
+func SetMetricResult(metricResults []argoinappiov1.MetricResult, result argoinappiov1.MetricResult) []argoinappiov1.MetricResult {
+	for i, r := range metricResults {
+		if r.Name == result.Name {
+			metricResults[i] = result
+			return metricResults
+		}
+	}
+	metricResults = append(metricResults, result)
+	return metricResults
+}
+
 // SetResult updates the metric result
 func SetResult(run *argoinappiov1.MetricRun, result argoinappiov1.MetricResult) {
 	for i, r := range run.Status.MetricResults {
