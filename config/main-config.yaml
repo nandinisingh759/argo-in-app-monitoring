@@ -20,6 +20,8 @@ spec:
         address: http://127.0.0.1:9090
         query: "machine_cpu_cores"
   - name: test3
+    #interval: 1m
+    failureLimit: 4
     successCondition: result[0] == 4
     provider:
       prometheus: 

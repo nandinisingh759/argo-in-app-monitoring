@@ -52,6 +52,9 @@ const (
 	// is successful and the run is terminated.
 	SuccessfulAssessmentRunTerminatedResult = "Metric Assessment Result - Successful: Run Terminated"
 	scheduledTimeAnnotation                 = "argo-in-app.io/scheduled-at"
+	// DefaultErrorRetryInterval is the default interval to retry a measurement upon error, in the
+	// event an interval was not specified
+	DefaultErrorRetryInterval = 10 * time.Second
 )
 
 // InAppMetricReconciler reconciles a InAppMetric object
@@ -108,11 +111,13 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return metricRunList.Items[i].Name < metricRunList.Items[j].Name
 	})
 
+	var run *argoinappiov1.MetricRun
+
 	// Iterate through all metric runs to update mostRecentTime
-	for _, run := range metricRunList.Items {
-		scheduledTimeForRun, err := getScheduledTimeForRun(&run)
+	for _, r := range metricRunList.Items {
+		scheduledTimeForRun, err := getScheduledTimeForRun(&r)
 		if err != nil {
-			ctrl.Log.Error(err, "unable to parse schedule time for run", "run", run)
+			ctrl.Log.Error(err, "unable to parse schedule time for run", "run", r)
 			continue
 		}
 		if scheduledTimeForRun != nil {
@@ -121,6 +126,18 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			} else if mostRecentTime.Before(*scheduledTimeForRun) {
 				mostRecentTime = scheduledTimeForRun
 			}
+		}
+		for _, metric := range r.Spec.Metrics {
+			if analysisutil.GetResult(&r, metric.Name) != nil {
+				counter := analysisutil.GetResult(&r, metric.Name).Counter
+				if metric.Count != nil && int(counter) != 0 && int(counter) != metric.Count.IntValue() {
+					ctrl.Log.Info(strconv.Itoa(int(counter)))
+					ctrl.Log.Info(strconv.Itoa(metric.Count.IntValue()))
+					ctrl.Log.Info("NEVER REACHED")
+					run = &r // this is an incomplete metric
+				}
+			}
+
 		}
 	}
 
@@ -133,14 +150,14 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// If user has specified a RunLimit (it will not be zero) delete any old runs that exceed the runLimit
 	if inAppMetric.Spec.RunLimit != 0 {
-		for i, run := range metricRunList.Items {
+		for i, runs := range metricRunList.Items {
 			if int32(i) >= int32(len(metricRunList.Items))-int32(inAppMetric.Spec.RunLimit) {
 				break
 			}
-			if err = r.Delete(context.TODO(), &run); client.IgnoreNotFound(err) != nil {
-				ctrl.Log.Error(err, "unable to delete old run", "run", run)
+			if err = r.Delete(context.TODO(), &runs); client.IgnoreNotFound(err) != nil {
+				ctrl.Log.Error(err, "unable to delete old run", "run", runs)
 			} else {
-				ctrl.Log.Info("deleted old run", "run", run)
+				ctrl.Log.Info("deleted old run", "run", runs)
 			}
 		}
 	}
@@ -153,32 +170,35 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// Create scheduledResult with the nextRun time
-	scheduledResult := ctrl.Result{RequeueAfter: nextRun.Sub(r.Now())}
+	scheduledResultTime := nextRun.Sub(r.Now())
+	scheduledResult := ctrl.Result{RequeueAfter: scheduledResultTime}
 
 	// If missedRun is zero then it is not time to run any query so return the scheduledResult
-	if missedRun.IsZero() {
+	if missedRun.IsZero() && run == nil { // if run is not nil, then we need to run more measurements and this means it has been enqueued
 		ctrl.Log.Info("no upcoming scheduled times")
 		return scheduledResult, nil
 	}
 
 	// Create newMetricRun
-	run := newMetricRun()
-	run.Namespace = inAppMetric.Namespace
-	timeNow := timeutil.MetaNow().Unix()
-	run.Name = "metricrun-" + strconv.FormatInt(timeNow, 10) // name of the metricRun is the time it was created in unix format
-	run.Annotations = make(map[string]string)
-	run.Annotations[scheduledTimeAnnotation] = missedRun.Format(time.RFC3339) // this annotation is used to later update lastScheduledTime
-	updateMetricsSpec(run, inAppMetric.Spec.Metrics)                          // Populate metricRun spec with the metrics from inAppMetric
+	if run == nil {
+		run = newMetricRun()
+		run.Namespace = inAppMetric.Namespace
+		timeNow := timeutil.MetaNow().Unix()
+		run.Name = "metricrun-" + strconv.FormatInt(timeNow, 10) // name of the metricRun is the time it was created in unix format
+		run.Annotations = make(map[string]string)
+		run.Annotations[scheduledTimeAnnotation] = missedRun.Format(time.RFC3339) // this annotation is used to later update lastScheduledTime
+		updateMetricsSpec(run, inAppMetric.Spec.Metrics)                          // Populate metricRun spec with the metrics from inAppMetric
 
-	// Grab annotations from inAppMetric and populate run's annotations
-	for k, v := range inAppMetric.Annotations {
-		run.Annotations[k] = v
-	}
+		// Grab annotations from inAppMetric and populate run's annotations
+		for k, v := range inAppMetric.Annotations {
+			run.Annotations[k] = v
+		}
 
-	// Create metricRun in cluster
-	err = r.Client.Create(context.TODO(), run)
-	if err != nil {
-		ctrl.Log.Error(err, "resource not created")
+		// Create metricRun in cluster
+		err = r.Client.Create(context.TODO(), run)
+		if err != nil {
+			ctrl.Log.Error(err, "resource not created")
+		}
 	}
 
 	// Run measurements for given metrics
@@ -219,6 +239,18 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	run.Status = status
 
+	/*nextReconcileTime := calculateNextReconcileTime(run, inAppMetric.Spec.Metrics)
+	if nextReconcileTime != nil {
+		enqueueSeconds := nextReconcileTime.Sub(timeutil.Now())
+		if enqueueSeconds < 0 {
+			enqueueSeconds = 0
+		}
+		ctrl.Log.Info("Enqueueing analysis after %v", "enqueue seconds", enqueueSeconds, "scheduled time", scheduledResultTime)
+		if enqueueSeconds < scheduledResultTime {
+			scheduledResult = ctrl.Result{RequeueAfter: scheduledResultTime}
+		}
+	}*/
+
 	// Update status of metricRun
 	if err = r.Client.Status().Update(context.TODO(), run); err != nil {
 		ctrl.Log.Error(err, "unable to update metric run status")
@@ -235,6 +267,89 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	return scheduledResult, nil
+}
+
+// calculateNextReconcileTime calculates the next time that this AnalysisRun should be reconciled,
+// based on the earliest time of all metrics intervals, counts, and their finishedAt timestamps
+func calculateNextReconcileTime(run *argoinappiov1.MetricRun, metrics []argoinappiov1.Metric) *time.Time {
+	var reconcileTime *time.Time
+	for _, metric := range metrics {
+		if analysisutil.MetricCompleted(run, metric.Name) {
+			// NOTE: this also covers the case where metric.Count is reached
+			continue
+		}
+		//logCtx := logutil.WithAnalysisRun(run).WithField("metric", metric.Name)
+		lastMeasurement := analysisutil.LastMeasurement(run, metric.Name)
+		if lastMeasurement == nil {
+			if metric.InitialDelay != "" {
+				startTime := timeutil.MetaNow()
+				if run.Status.StartedAt != nil {
+					startTime = *run.Status.StartedAt
+				}
+				parsedInterval, err := parseMetricInterval(metric.InitialDelay)
+				if err != nil {
+					continue
+				}
+				endInitialDelay := startTime.Add(parsedInterval)
+				if reconcileTime == nil || reconcileTime.After(endInitialDelay) {
+					reconcileTime = &endInitialDelay
+				}
+				continue
+			}
+			// no measurement was started . we should never get here
+			ctrl.Log.Info("Metric never started. Not factored into enqueue time.")
+			continue
+		}
+		if lastMeasurement.FinishedAt == nil {
+			// unfinished in-flight measurement.
+			if lastMeasurement.ResumeAt != nil {
+				if reconcileTime == nil || reconcileTime.After(lastMeasurement.ResumeAt.Time) {
+					reconcileTime = &lastMeasurement.ResumeAt.Time
+				}
+			}
+			continue
+		}
+		metricResult := analysisutil.GetResult(run, metric.Name)
+		effectiveCount := metric.EffectiveCount()
+		if effectiveCount != nil && metricResult.Count >= int32(effectiveCount.IntValue()) {
+			// we have reached desired count
+			continue
+		}
+		var interval time.Duration
+		if lastMeasurement.Phase == argoinappiov1.AnalysisPhaseError {
+			interval = DefaultErrorRetryInterval
+		} else if metric.Interval != "" {
+			parsedInterval, err := parseMetricInterval(metric.Interval)
+			if err != nil {
+				continue
+			}
+			interval = parsedInterval
+		} else {
+			// if we get here, an interval was not set (meaning reoccurrence was not desired), and
+			// there was no error (meaning we don't need to retry). no need to requeue this metric.
+			// NOTE: we shouldn't ever get here since it means we are not doing proper bookkeeping
+			// of count.
+			ctrl.Log.Info("Skipping requeue. No interval or error (count: %d, effectiveCount: %s)", "metricResult count", metricResult.Count) //, metric.EffectiveCount().String())
+			continue
+		}
+		// Take the earliest time of all metrics
+		metricReconcileTime := lastMeasurement.FinishedAt.Add(interval)
+		if reconcileTime == nil || reconcileTime.After(metricReconcileTime) {
+			reconcileTime = &metricReconcileTime
+		}
+	}
+	return reconcileTime
+}
+
+// parseMetricInterval is a helper method to parse the given metric interval and return the
+// parsed duration or error (if any)
+func parseMetricInterval(metricDurationString argoinappiov1.DurationString) (time.Duration, error) {
+	metricInterval, err := metricDurationString.Duration()
+	if err != nil {
+		ctrl.Log.Error(err, "Failed to parse interval: %v")
+		return -1, err
+	}
+	return metricInterval, nil
 }
 
 /** Populates given metricRun's metricRun.Spec.Metrics with the give metrics **/
@@ -299,6 +414,13 @@ func runMeasurements(run *argoinappiov1.MetricRun, tasks []argoinappiov1.Metric)
 				Name:     task.Name,
 				Phase:    argoinappiov1.AnalysisPhaseRunning,
 				Metadata: provider.GetMetadata(task),
+				Counter:  1,
+			}
+		} else {
+			if task.Count.IntValue() == int(metricResult.Counter) {
+				continue
+			} else {
+				metricResult.Counter++
 			}
 		}
 
@@ -405,6 +527,7 @@ func assessRunStatus(run *argoinappiov1.MetricRun, metrics []argoinappiov1.Metri
 			everythingCompleted = false
 		}
 	}
+
 	worstMessage = strings.TrimSpace(worstMessage)
 	if terminating {
 		if worstStatus == "" {

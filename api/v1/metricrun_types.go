@@ -325,6 +325,10 @@ type MetricResult struct {
 	// the final state which gets used while taking measurements. For example, Prometheus uses this field
 	// to store the final resolved query after substituting the template arguments.
 	Metadata map[string]string `json:"metadata,omitempty" protobuf:"bytes,12,rep,name=metadata"`
+
+	// ADD IN DESCRIPTION
+	Counter   int32 `json:"currCount,omitempty"`
+	CountFlag bool  `json:"countFlag,omitempty"`
 }
 
 // Measurement is a point in time result value of a single metric, and the time it was measured

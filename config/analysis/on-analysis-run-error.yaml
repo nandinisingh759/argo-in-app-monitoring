@@ -13,7 +13,7 @@ data:
         method: POST
         path: /
         body: |
-            Metric run {{.run.status.phase}} is running.
+            Metric run {{.run.status.runSummary.failed}} is running.
 
   service.webhook.whname: |
     url: http://localhost:7893
