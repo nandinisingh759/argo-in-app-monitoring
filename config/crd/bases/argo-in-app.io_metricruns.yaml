@@ -38,7 +38,7 @@ spec:
               metrics:
                 description: Array of metrics from inAppMetric Spec
                 items:
-                  description: Metric defines a metric in which to perform analysis
+                  description: Metric defines a metric in which to perform notifications
                   properties:
                     consecutiveErrorLimit:
                       anyOf:
@@ -94,7 +94,7 @@ spec:
                       type: string
                     provider:
                       description: Provider configuration to the external system to
-                        use to verify the analysis
+                        use to verify the notifications
                       properties:
                         cloudWatch:
                           description: CloudWatch specifies the cloudWatch metric
@@ -10056,7 +10056,7 @@ spec:
                   type: object
                 type: array
               phase:
-                description: Phase is the status of the analysis run
+                description: Phase is the status of the notifications run
                 type: string
               runSummary:
                 description: RunSummary contains the final results from the metric

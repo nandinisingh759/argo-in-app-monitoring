@@ -55,7 +55,7 @@ func MetricCompleted(run *argoinappiov1.MetricRun, metricName string) bool {
 	return false
 }
 
-// IsTerminating returns whether or not the analysis run is terminating, either because a terminate
+// IsTerminating returns whether or not the notifications run is terminating, either because a terminate
 // was requested explicitly, or because a metric has already measured Failed, Error, or Inconclusive
 // which causes the run to end prematurely.
 func IsTerminating(run *argoinappiov1.MetricRun) bool {
@@ -80,7 +80,7 @@ func LastMeasurement(run *argoinappiov1.MetricRun, metricName string) *argoinapp
 	return nil
 }
 
-// analysisStatusOrder is a list of completed analysis sorted in best to worst condition
+// analysisStatusOrder is a list of completed notifications sorted in best to worst condition
 var analysisStatusOrder = []argoinappiov1.AnalysisPhase{
 	argoinappiov1.AnalysisPhaseSuccessful,
 	argoinappiov1.AnalysisPhaseRunning,

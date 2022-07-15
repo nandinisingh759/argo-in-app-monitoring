@@ -242,7 +242,7 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if enqueueSeconds < 0 {
 			enqueueSeconds = 0
 		}
-		ctrl.Log.Info("Enqueueing analysis after %v", "enqueue seconds", enqueueSeconds, "scheduled time", scheduledResultTime)
+		ctrl.Log.Info("Enqueueing:", "enqueue seconds", enqueueSeconds, "scheduled time", scheduledResultTime)
 		if enqueueSeconds < scheduledResultTime {
 			scheduledResult = ctrl.Result{RequeueAfter: enqueueSeconds}
 		}
@@ -332,8 +332,6 @@ func calculateNextReconcileTime(run *argoinappiov1.MetricRun, metrics []argoinap
 		// Take the earliest time of all metrics
 		metricReconcileTime := lastMeasurement.FinishedAt.Add(interval)
 		if reconcileTime == nil || reconcileTime.After(metricReconcileTime) {
-			ctrl.Log.Info("RECONCILE TIME: " + metricReconcileTime.String())
-			ctrl.Log.Info("CURRENT TIME" + time.Now().String())
 			reconcileTime = &metricReconcileTime
 		}
 	}
@@ -408,10 +406,6 @@ func runMeasurements(run *argoinappiov1.MetricRun, tasks []argoinappiov1.Metric)
 	//metricResults = []argoinappiov1.MetricResult{}
 	for _, task := range tasks {
 		e := log.Entry{}
-		if task.Count == nil {
-			ctrl.Log.Info(task.Name)
-			ctrl.Log.Info("COUNT IS NIL")
-		}
 
 		provider, err := metricproviders.NewProvider(e, task)
 		if err != nil {
@@ -505,7 +499,7 @@ func assessRunStatus(run *argoinappiov1.MetricRun, metrics []argoinappiov1.Metri
 				analysisutil.SetResult(run, *result)
 			}
 			if !metricStatus.Completed() {
-				// if any metric is in-progress, then entire analysis run will be considered running
+				// if any metric is in-progress, then entire notifications run will be considered running
 				everythingCompleted = false
 			} else {
 				phase, message := assessMetricFailureInconclusiveOrError(metric, *result)

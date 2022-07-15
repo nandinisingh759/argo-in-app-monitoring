@@ -37,7 +37,7 @@ spec:
             properties:
               metrics:
                 items:
-                  description: Metric defines a metric in which to perform analysis
+                  description: Metric defines a metric in which to perform notifications
                   properties:
                     consecutiveErrorLimit:
                       anyOf:
@@ -93,7 +93,7 @@ spec:
                       type: string
                     provider:
                       description: Provider configuration to the external system to
-                        use to verify the analysis
+                        use to verify the notifications
                       properties:
                         cloudWatch:
                           description: CloudWatch specifies the cloudWatch metric

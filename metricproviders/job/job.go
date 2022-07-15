@@ -16,7 +16,7 @@ import (
 	batchlisters "k8s.io/client-go/listers/batch/v1"
 
 	v1alpha1 "monitoring/api/v1"
-	analysisutil "monitoring/utils/analysis"
+	analysisutil "monitoring/utils/notifications"
 	metricutil "monitoring/utils/metric"
 	timeutil "monitoring/utils/time"
 )

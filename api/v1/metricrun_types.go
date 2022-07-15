@@ -33,7 +33,7 @@ type MetricRunSpec struct {
 	Metrics []Metric `json:"metrics,omitempty" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,1,rep,name=metrics"`
 }
 
-// Metric defines a metric in which to perform analysis
+// Metric defines a metric in which to perform notifications
 type Metric struct {
 	// Name is the name of the metric
 	Name string `json:"name" protobuf:"bytes,1,opt,name=name"`
@@ -66,7 +66,7 @@ type Metric struct {
 	// ConsecutiveErrorLimit is the maximum number of times the measurement is allowed to error in
 	// succession, before the metric is considered error (default: 4)
 	ConsecutiveErrorLimit *intstrutil.IntOrString `json:"consecutiveErrorLimit,omitempty" protobuf:"bytes,9,opt,name=consecutiveErrorLimit"`
-	// Provider configuration to the external system to use to verify the analysis
+	// Provider configuration to the external system to use to verify the notifications
 	Provider MetricProvider `json:"provider" protobuf:"bytes,10,opt,name=provider"`
 }
 
@@ -104,7 +104,7 @@ const (
 	AnalysisPhaseInconclusive AnalysisPhase = "Inconclusive"
 )
 
-// Completed returns whether or not the analysis status is considered completed
+// Completed returns whether or not the notifications status is considered completed
 func (as AnalysisPhase) Completed() bool {
 	switch as {
 	case AnalysisPhaseSuccessful, AnalysisPhaseFailed, AnalysisPhaseError, AnalysisPhaseInconclusive:
@@ -120,7 +120,7 @@ type PrometheusMetric struct {
 	Query string `json:"query,omitempty" protobuf:"bytes,2,opt,name=query"`
 }
 
-// WavefrontMetric defines the wavefront query to perform canary analysis
+// WavefrontMetric defines the wavefront query to perform canary notifications
 type WavefrontMetric struct {
 	// Address is the HTTP address and port of the wavefront server
 	Address string `json:"address,omitempty" protobuf:"bytes,1,opt,name=address"`
@@ -128,7 +128,7 @@ type WavefrontMetric struct {
 	Query string `json:"query,omitempty" protobuf:"bytes,2,opt,name=query"`
 }
 
-// NewRelicMetric defines the newrelic query to perform canary analysis
+// NewRelicMetric defines the newrelic query to perform canary notifications
 type NewRelicMetric struct {
 	// Profile is the name of the secret holding NR account configuration
 	Profile string `json:"profile,omitempty" protobuf:"bytes,1,opt,name=profile"`
@@ -142,7 +142,7 @@ type JobMetric struct {
 	Spec     batchv1.JobSpec   `json:"spec" protobuf:"bytes,2,opt,name=spec"`
 }
 
-// GraphiteMetric defines the Graphite query to perform canary analysis
+// GraphiteMetric defines the Graphite query to perform canary notifications
 type GraphiteMetric struct {
 	// Address is the HTTP address and port of the Graphite server
 	Address string `json:"address,omitempty" protobuf:"bytes,1,opt,name=address"`
@@ -150,7 +150,7 @@ type GraphiteMetric struct {
 	Query string `json:"query,omitempty" protobuf:"bytes,2,opt,name=query"`
 }
 
-// CloudWatchMetric defines the cloudwatch query to perform canary analysis
+// CloudWatchMetric defines the cloudwatch query to perform canary notifications
 type CloudWatchMetric struct {
 	Interval          DurationString              `json:"interval,omitempty" protobuf:"bytes,1,opt,name=interval,casttype=DurationString"`
 	MetricDataQueries []CloudWatchMetricDataQuery `json:"metricDataQueries" protobuf:"bytes,2,rep,name=metricDataQueries"`
@@ -268,7 +268,7 @@ func (d DurationString) Duration() (time.Duration, error) {
 
 // MetricRunStatus defines the observed state of MetricRun
 type MetricRunStatus struct {
-	// Phase is the status of the analysis run
+	// Phase is the status of the notifications run
 	Phase AnalysisPhase `json:"phase" protobuf:"bytes,1,opt,name=phase,casttype=AnalysisPhase"`
 	// Message is a message explaining current status
 	Message string `json:"message,omitempty" protobuf:"bytes,2,opt,name=message"`
