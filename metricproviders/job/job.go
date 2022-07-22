@@ -1,10 +1,10 @@
 package job
 
-/*
-import (
+/*import (
 	"context"
 	"errors"
 	"fmt"
+	analysisutil "monitoring/utils/analysis"
 	"sort"
 
 	log "github.com/sirupsen/logrus"
@@ -16,8 +16,8 @@ import (
 	batchlisters "k8s.io/client-go/listers/batch/v1"
 
 	v1alpha1 "monitoring/api/v1"
-	analysisutil "monitoring/utils/notifications"
 	metricutil "monitoring/utils/metric"
+	//analysisutil "monitoring/utils/notifications"
 	timeutil "monitoring/utils/time"
 )
 
@@ -35,7 +35,7 @@ const (
 )
 
 var (
-	analysisRunGVK = v1alpha1.SchemeGroupVersion.WithKind("AnalysisRun")
+	metricRunGVK = v1alpha1.SchemeGroupVersion.WithKind("MetricRun")
 )
 
 type JobProvider struct {
@@ -84,7 +84,7 @@ func newMetricJob(run *v1alpha1.MetricRun, metric v1alpha1.Metric) (*batchv1.Job
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            newJobName(run, metric),
 			Namespace:       run.Namespace,
-			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(run, analysisRunGVK)},
+			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(run, metricRunGVK)},
 			Annotations: map[string]string{
 				AnalysisRunNameAnnotationKey:   run.Name,
 				AnalysisRunMetricAnnotationKey: metric.Name,

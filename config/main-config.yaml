@@ -5,7 +5,7 @@ metadata:
   annotations: 
     notifications.argoproj.io/subscribe.on-analysis-run-error.whname: ""
 spec:
-  schedule: "*/5 * * * *"
+  schedule: "*/2 * * * *"
   runLimit: 4
   metrics: 
   - name: test

@@ -2,6 +2,7 @@ package metricproviders
 
 import (
 	"fmt"
+	"k8s.io/client-go/kubernetes"
 
 	"monitoring/metricproviders/cloudwatch"
 	"monitoring/metricproviders/datadog"
@@ -16,6 +17,10 @@ import (
 
 	v1alpha1 "monitoring/api/v1"
 )
+
+type ProviderFactory struct {
+	KubeClient kubernetes.Interface
+}
 
 // Provider methods to query a external systems and generate a measurement
 type Provider interface {

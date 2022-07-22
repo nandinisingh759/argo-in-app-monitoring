@@ -403,7 +403,6 @@ func runMeasurements(run *argoinappiov1.MetricRun, tasks []argoinappiov1.Metric)
 		metricResults = run.Status.MetricResults
 	}
 
-	//metricResults = []argoinappiov1.MetricResult{}
 	for _, task := range tasks {
 		e := log.Entry{}
 

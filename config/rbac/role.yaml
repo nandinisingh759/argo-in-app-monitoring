@@ -6,9 +6,25 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - ""
+  - batch
+  resources:
+  - secrets
+  - configmaps
+  - jobs
+  - events
+  verbs:
+  - get
+  - watch
+  - list
+  - create
+- apiGroups:
   - argo-in-app.io
+  - coordination.k8s.io
   resources:
   - metricruns
+  - leases
+  - inappmetrics
   verbs:
   - create
   - delete
@@ -27,6 +43,7 @@ rules:
   - argo-in-app.io
   resources:
   - metricruns/status
+  - inappmetrics/status
   verbs:
   - get
   - patch
