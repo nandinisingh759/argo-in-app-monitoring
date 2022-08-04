@@ -508,7 +508,7 @@ func assessRunStatus(run *argoinappiov1.MetricRun, metrics []argoinappiov1.Metri
 				if worstStatus == "" || analysisutil.IsWorse(worstStatus, metricStatus) {
 					worstStatus = metricStatus
 					if message != "" {
-						worstMessage = fmt.Sprintf("Metric \"%s\" assessed %s due to %s", metric.Name, metricStatus, message)
+						worstMessage = fmt.Sprintf("%s assessed %s due to %s", metric.Name, metricStatus, message)
 						if result.Message != "" {
 							worstMessage += fmt.Sprintf(": \"Error Message: %s\"", result.Message)
 						}
