@@ -180,6 +180,9 @@ func (r *InAppMetricReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if run == nil {
 		run = newMetricRun()
 		run.Namespace = inAppMetric.Namespace
+		ownerReference := metav1.OwnerReference{Name: inAppMetric.Name, Kind: inAppMetric.Kind, APIVersion: inAppMetric.APIVersion, UID: inAppMetric.UID}
+		owners := []metav1.OwnerReference{ownerReference}
+		run.SetOwnerReferences(owners)
 		timeNow := timeutil.MetaNow().Unix()
 		run.Name = "metricrun-" + strconv.FormatInt(timeNow, 10) // name of the metricRun is the time it was created in unix format
 		run.Annotations = make(map[string]string)

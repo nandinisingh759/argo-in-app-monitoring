@@ -13,7 +13,9 @@ data:
         method: POST
         path: /
         body: |
-            Metric run {{.run.metadata.name}} has failed.
+          {
+            {{range $index, $c := .run.status.metricResults}}
+          }
 
   service.webhook.whname: |
     url: http://localhost:7893
