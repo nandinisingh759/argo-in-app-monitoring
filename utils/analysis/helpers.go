@@ -91,7 +91,7 @@ var analysisStatusOrder = []argoinappiov1.AnalysisPhase{
 }
 
 // IsBad returns whether or not the new health status code warrants a notification to the user.
-func isBad(current, new argoinappiov1.AnalysisPhase) bool {
+func IsBad(current, new argoinappiov1.AnalysisPhase) bool {
 	if new == analysisStatusOrder[3] || new == analysisStatusOrder[4] || new == analysisStatusOrder[5] {
 		return true
 	}
