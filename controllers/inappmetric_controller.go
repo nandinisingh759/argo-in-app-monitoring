@@ -505,10 +505,13 @@ func assessRunStatus(run *argoinappiov1.MetricRun, metrics []argoinappiov1.Metri
 				everythingCompleted = false
 			} else {
 				phase, message := assessMetricFailureInconclusiveOrError(metric, *result)
-				if worstStatus == "" || analysisutil.IsWorse(worstStatus, metricStatus) {
+				if analysisutil.IsBad(metricStatus) {
 					worstStatus = metricStatus
 					if message != "" {
-						worstMessage = fmt.Sprintf("Metric %s assessed %s due to %s", metric.Name, metricStatus, message)
+						if worstMessage != "" {
+							worstMessage += "; "
+						}
+						worstMessage += fmt.Sprintf("%s assessed %s due to %s", metric.Name, metricStatus, message)
 						if result.Message != "" {
 							worstMessage += fmt.Sprintf(": \"Error Message: %s\"", result.Message)
 						}
