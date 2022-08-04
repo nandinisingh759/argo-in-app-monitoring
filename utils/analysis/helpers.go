@@ -90,18 +90,10 @@ var analysisStatusOrder = []argoinappiov1.AnalysisPhase{
 	argoinappiov1.AnalysisPhaseFailed,
 }
 
-// IsWorse returns whether or not the new health status code is a worser condition than the current.
-// Both statuses must be already completed
-func IsWorse(current, new argoinappiov1.AnalysisPhase) bool {
-	currentIndex := 0
-	newIndex := 0
-	for i, code := range analysisStatusOrder {
-		if current == code {
-			currentIndex = i
-		}
-		if new == code {
-			newIndex = i
-		}
+// IsBad returns whether or not the new health status code warrants a notification to the user.
+func isBad(current, new argoinappiov1.AnalysisPhase) bool {
+	if new == analysisStatusOrder[3] || new == analysisStatusOrder[4] || new == analysisStatusOrder[5] {
+		return true
 	}
-	return newIndex > currentIndex
+	return false
 }
